@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GigChat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <main class="hero">
+    <video class="hero-video" autoplay muted loop playsinline>
+      <source src="gigchat-video.mp4" type="video/mp4" />
+    </video>
+
+<form class="request-bar" id="requestForm">
+  <span class="plus-icon">+</span>
+
+  <input
+    id="requestInput"
+    type="text"
+    placeholder="What do you want to request?"
+    autocomplete="off"
+  />
+
+  <button type="submit" class="voice-button">
+    ↑
+  </button>
+</form>
+
+<p class="request-status" id="requestStatus"></p>
+
+<div class="channel-choice" id="channelChoice" hidden>
+  <button type="button" data-channel="whatsapp">WhatsApp</button>
+  <button type="button" data-channel="sms">SMS</button>
+</div>
+
+    <div class="bottom-copy">
+  <p class="quote">
+    "The future won't be downloaded. It will be requested"
+  </p>
+
+  <p class="terms">
+    By messaging GigChat, you agree to our
+    <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>
+  </p>
+
+  <p class="copyright">
+    Copyright © 2026 GigChat - All Rights Reserved
+  </p>
+</div>
+  </main>
+
+<script>
+  const form = document.getElementById("requestForm");
+  const input = document.getElementById("requestInput");
+  const status = document.getElementById("requestStatus");
+  const button = form.querySelector(".voice-button");
+  const plusIcon = form.querySelector(".plus-icon");
+  const channelChoice = document.getElementById("channelChoice");
+  const SUPABASE_FUNCTION_URL = "https://ohpsfazyxduzacwdjyrv.supabase.co/functions/v1/gigchat-request";
+
+  let step = "request";
+  let savedRequest = "";
+  let savedPhone = "";
+  let isTyping = false;
+
+  function lockBar() {
+    input.disabled = true;
+    button.disabled = true;
+    plusIcon.textContent = "✦";
+  }
+
+  function unlockBar() {
+    input.disabled = false;
+    button.disabled = false;
+    plusIcon.textContent = "+";
+  }
+
+  function showThinking(callback) {
+    isTyping = true;
+    status.textContent = ".";
+
+    const frames = [".", "..", "..."];
+    let index = 0;
+
+    const thinking = setInterval(function () {
+      status.textContent = frames[index];
+      index = (index + 1) % frames.length;
+    }, 420);
+
+    setTimeout(function () {
+      clearInterval(thinking);
+      status.textContent = "";
+
+      if (callback) callback();
+    }, 1400);
+  }
+
+  function typeText(text, callback) {
+    status.textContent = "";
+    let i = 0;
+
+    const typing = setInterval(function () {
+      status.textContent += text.charAt(i);
+      i++;
+
+      if (i >= text.length) {
+        clearInterval(typing);
+        isTyping = false;
+
+        if (callback) {
+          setTimeout(callback, 500);
+        }
+      }
+    }, 28);
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+
+    if (isTyping) return;
+
+    const value = input.value.trim();
+
+    if (!value) {
+      isTyping = true;
+      typeText(
+        step === "request"
+          ? "Type what you want to request first."
+          : "Enter your phone number to continue."
+      );
+      return;
+    }
+
+    if (step === "request") {
+      savedRequest = value;
+      step = "phone";
+
+      lockBar();
+
+      showThinking(function () {
+        typeText(`Got it — “${savedRequest}”`, function () {
+  input.value = "";
+  input.type = "tel";
+  input.placeholder = "Where should GigChat text you?";
+
+  unlockBar();
+
+  button.textContent = "→";
+  status.textContent = "";
+
+  input.focus();
+});
+      });
+
+      return;
+    }
+
+    if (step === "phone") {
+      savedPhone = value;
+      step = "channel";
+
+      input.value = "";
+      input.placeholder = "Choose WhatsApp or SMS below.";
+
+      lockBar();
+      button.textContent = "•";
+
+      showThinking(function () {
+        typeText("How should GigChat continue with you?", function () {
+          input.disabled = true;
+          button.disabled = true;
+          plusIcon.textContent = "✦";
+          channelChoice.hidden = false;
+        });
+      });
+
+      return;
+    }
+  });
+
+  channelChoice.addEventListener("click", async function (event) {
+  const selectedButton = event.target.closest("button");
+  if (!selectedButton) return;
+
+  const channel = selectedButton.dataset.channel;
+
+  channelChoice.hidden = true;
+
+  input.placeholder = "Sending request...";
+  button.textContent = "•";
+  plusIcon.textContent = "✦";
+
+  isTyping = true;
+
+  showThinking(async function () {
+    try {
+      const response = await fetch(SUPABASE_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          request_text: savedRequest,
+          phone: savedPhone,
+          preferred_channel: channel
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Request failed");
+      }
+
+      input.placeholder = "Request received.";
+      button.textContent = "✓";
+
+      const finalMessage =
+        channel === "whatsapp"
+          ? `Request received. We’ll continue by WhatsApp at ${savedPhone}.`
+          : `Request received. We’ll continue by SMS at ${savedPhone}.`;
+
+      typeText(finalMessage);
+
+      console.log("Saved to Supabase:", result);
+    } catch (error) {
+      console.error(error);
+
+      input.disabled = false;
+      button.disabled = false;
+      button.textContent = "→";
+      plusIcon.textContent = "+";
+      input.placeholder = "Try again or check your connection.";
+
+      typeText("Something went wrong. Please try again.");
+    }
+  });
+
+    console.log({
+      request: savedRequest,
+      phone: savedPhone,
+      preferred_channel: channel,
+      source: "website"
+    });
+  });
+</script>
+
+</body>
+</html>
