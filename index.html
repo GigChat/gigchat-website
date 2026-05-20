@@ -8,8 +8,10 @@
 </head>
 <body>
 
+<button class="language-toggle" id="languageToggle" type="button">ES</button>
+
   <main class="hero">
-    <video class="hero-video" autoplay muted loop playsinline>
+    <video id="heroVideo" class="hero-video" autoplay muted loop playsinline preload="auto">
       <source src="gigchat-video.mp4" type="video/mp4" />
     </video>
 
@@ -36,17 +38,17 @@
 </div>
 
     <div class="bottom-copy">
-  <p class="quote">
+  <p class="quote" id="quoteText">
     "The future won't be downloaded. It will be requested"
   </p>
 
-  <p class="terms">
+  <p class="terms" id="termsText">
     By messaging GigChat, you agree to our
     <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>
   </p>
 
-  <p class="copyright">
-    Copyright © 2026 GigChat - All Rights Reserved
+  <p class="copyright" id="copyrightText">
+    Copyright ©️ 2026 GigChat - All Rights Reserved
   </p>
 </div>
   </main>
@@ -58,12 +60,95 @@
   const button = form.querySelector(".voice-button");
   const plusIcon = form.querySelector(".plus-icon");
   const channelChoice = document.getElementById("channelChoice");
+  const languageToggle = document.getElementById("languageToggle");
+  const quoteText = document.getElementById("quoteText");
+  const termsText = document.getElementById("termsText");
+  const copyrightText = document.getElementById("copyrightText");
+  const heroVideo = document.getElementById("heroVideo");
+
   const SUPABASE_FUNCTION_URL = "https://ohpsfazyxduzacwdjyrv.supabase.co/functions/v1/gigchat-request";
 
   let step = "request";
   let savedRequest = "";
   let savedPhone = "";
   let isTyping = false;
+  let currentLang = localStorage.getItem("gigchat_lang") || "en";
+
+  const copy = {
+    en: {
+      requestPlaceholder: "What do you want to request?",
+      phonePlaceholder: "Where should GigChat text you?",
+      channelPlaceholder: "Choose WhatsApp or SMS below.",
+      receivedPlaceholder: "Request received.",
+      sendingPlaceholder: "Sending request...",
+      emptyRequest: "Type what you want to request first.",
+      emptyPhone: "Enter your phone number to continue.",
+      gotIt: (request) => `Got it — “${request}”`,
+      handoffQuestion: "How should GigChat continue with you?",
+      finalWhatsapp: (phone) => `Request received. We’ll continue by WhatsApp at ${phone}.`,
+      finalSms: (phone) => `Request received. We’ll continue by SMS at ${phone}.`,
+      error: "Something went wrong. Please try again.",
+      tryAgain: "Try again or check your connection.",
+      quote: `"The future won't be downloaded. It will be requested"`,
+      termsHtml:
+        `By messaging GigChat, you agree to our ` +
+        `<a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>`,
+      copyright: "Copyright ©️ 2026 GigChat - All Rights Reserved",
+      toggleLabel: "ES"
+    },
+    es: {
+      requestPlaceholder: "¿Qué quieres pedir?",
+      phonePlaceholder: "¿Dónde debe escribirte GigChat?",
+      channelPlaceholder: "Elige WhatsApp o SMS abajo.",
+      receivedPlaceholder: "Solicitud recibida.",
+      sendingPlaceholder: "Enviando solicitud...",
+      emptyRequest: "Escribe primero lo que quieres pedir.",
+      emptyPhone: "Ingresa tu número para continuar.",
+      gotIt: (request) => `Entendido — “${request}”`,
+      handoffQuestion: "¿Cómo debe continuar GigChat contigo?",
+      finalWhatsapp: (phone) => `Solicitud recibida. Seguiremos por WhatsApp al ${phone}.`,
+      finalSms: (phone) => `Solicitud recibida. Seguiremos por SMS al ${phone}.`,
+      error: "Algo salió mal. Inténtalo de nuevo.",
+      tryAgain: "Intenta de nuevo o revisa tu conexión.",
+      quote: `"El futuro no se descargará. Se pedirá."`,
+      termsHtml:
+  `Aceptas nuestros ` +
+  `<a href="terms.html">Términos</a> y <a href="privacy.html">Privacidad</a>`,
+      copyright: "Copyright ©️ 2026 GigChat - Todos los derechos reservados",
+      toggleLabel: "EN"
+    }
+  };
+
+  function t(key, value) {
+    const item = copy[currentLang][key];
+    return typeof item === "function" ? item(value) : item;
+  }
+
+  function applyLanguage() {
+    languageToggle.textContent = t("toggleLabel");
+
+    quoteText.textContent = t("quote");
+    termsText.innerHTML = t("termsHtml");
+    copyrightText.textContent = t("copyright");
+
+    if (step === "request") {
+      input.placeholder = t("requestPlaceholder");
+    }
+
+    if (step === "phone") {
+      input.placeholder = t("phonePlaceholder");
+    }
+
+    if (step === "channel") {
+      input.placeholder = t("channelPlaceholder");
+    }
+  }
+
+  languageToggle.addEventListener("click", function () {
+    currentLang = currentLang === "en" ? "es" : "en";
+    localStorage.setItem("gigchat_lang", currentLang);
+    applyLanguage();
+  });
 
   function lockBar() {
     input.disabled = true;
@@ -116,6 +201,48 @@
     }, 28);
   }
 
+  function keepHeroVideoPlaying() {
+  if (!heroVideo) return;
+
+  heroVideo.muted = true;
+  heroVideo.defaultMuted = true;
+  heroVideo.loop = true;
+  heroVideo.playsInline = true;
+
+  const tryPlay = function () {
+    if (document.hidden) return;
+
+    heroVideo.play().catch(function () {
+      // iPhone/Safari may block autoplay until the next touch.
+    });
+  };
+
+  tryPlay();
+  setTimeout(tryPlay, 250);
+  setTimeout(tryPlay, 900);
+}
+
+  document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) keepHeroVideoPlaying();
+});
+
+window.addEventListener("pageshow", keepHeroVideoPlaying);
+window.addEventListener("focus", keepHeroVideoPlaying);
+window.addEventListener("blur", keepHeroVideoPlaying);
+
+document.addEventListener("touchstart", keepHeroVideoPlaying);
+document.addEventListener("click", keepHeroVideoPlaying);
+
+heroVideo.addEventListener("pause", function () {
+  if (!document.hidden) {
+    setTimeout(keepHeroVideoPlaying, 300);
+  }
+});
+
+setInterval(function () {
+  if (!document.hidden) keepHeroVideoPlaying();
+}, 2000);
+
   form.addEventListener("submit", function (event) {
     event.preventDefault();
 
@@ -125,11 +252,7 @@
 
     if (!value) {
       isTyping = true;
-      typeText(
-        step === "request"
-          ? "Type what you want to request first."
-          : "Enter your phone number to continue."
-      );
+      typeText(step === "request" ? t("emptyRequest") : t("emptyPhone"));
       return;
     }
 
@@ -140,18 +263,18 @@
       lockBar();
 
       showThinking(function () {
-        typeText(`Got it — “${savedRequest}”`, function () {
-  input.value = "";
-  input.type = "tel";
-  input.placeholder = "Where should GigChat text you?";
+        typeText(t("gotIt", savedRequest), function () {
+          input.value = "";
+          input.type = "tel";
+          input.placeholder = t("phonePlaceholder");
 
-  unlockBar();
+          unlockBar();
 
-  button.textContent = "→";
-  status.textContent = "";
+          button.textContent = "→";
+          status.textContent = "";
 
-  input.focus();
-});
+          input.focus();
+        });
       });
 
       return;
@@ -162,13 +285,13 @@
       step = "channel";
 
       input.value = "";
-      input.placeholder = "Choose WhatsApp or SMS below.";
+      input.placeholder = t("channelPlaceholder");
 
       lockBar();
       button.textContent = "•";
 
       showThinking(function () {
-        typeText("How should GigChat continue with you?", function () {
+        typeText(t("handoffQuestion"), function () {
           input.disabled = true;
           button.disabled = true;
           plusIcon.textContent = "✦";
@@ -181,70 +304,70 @@
   });
 
   channelChoice.addEventListener("click", async function (event) {
-  const selectedButton = event.target.closest("button");
-  if (!selectedButton) return;
+    const selectedButton = event.target.closest("button");
+    if (!selectedButton) return;
 
-  const channel = selectedButton.dataset.channel;
+    const channel = selectedButton.dataset.channel;
 
-  channelChoice.hidden = true;
+    channelChoice.hidden = true;
 
-  input.placeholder = "Sending request...";
-  button.textContent = "•";
-  plusIcon.textContent = "✦";
+    input.placeholder = t("sendingPlaceholder");
+    button.textContent = "•";
+    plusIcon.textContent = "✦";
 
-  isTyping = true;
+    isTyping = true;
 
-  showThinking(async function () {
-    try {
-      const response = await fetch(SUPABASE_FUNCTION_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          request_text: savedRequest,
-          phone: savedPhone,
-          preferred_channel: channel
-        })
-      });
+    showThinking(async function () {
+      try {
+        const response = await fetch(SUPABASE_FUNCTION_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            request_text: savedRequest,
+            phone: savedPhone,
+            preferred_channel: channel
+          })
+        });
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || "Request failed");
+        if (!response.ok) {
+          throw new Error(result.error || "Request failed");
+        }
+
+        if (result.twilio_error) {
+          throw new Error(result.twilio_error);
+        }
+
+        input.placeholder = t("receivedPlaceholder");
+        button.textContent = "✓";
+
+        const finalMessage =
+          channel === "whatsapp"
+            ? t("finalWhatsapp", savedPhone)
+            : t("finalSms", savedPhone);
+
+        typeText(finalMessage);
+
+        console.log("Saved to Supabase:", result);
+      } catch (error) {
+        console.error(error);
+
+        input.disabled = false;
+        button.disabled = false;
+        button.textContent = "→";
+        plusIcon.textContent = "+";
+        input.placeholder = t("tryAgain");
+
+        typeText(t("error"));
       }
-
-      input.placeholder = "Request received.";
-      button.textContent = "✓";
-
-      const finalMessage =
-        channel === "whatsapp"
-          ? `Request received. We’ll continue by WhatsApp at ${savedPhone}.`
-          : `Request received. We’ll continue by SMS at ${savedPhone}.`;
-
-      typeText(finalMessage);
-
-      console.log("Saved to Supabase:", result);
-    } catch (error) {
-      console.error(error);
-
-      input.disabled = false;
-      button.disabled = false;
-      button.textContent = "→";
-      plusIcon.textContent = "+";
-      input.placeholder = "Try again or check your connection.";
-
-      typeText("Something went wrong. Please try again.");
-    }
-  });
-
-    console.log({
-      request: savedRequest,
-      phone: savedPhone,
-      preferred_channel: channel,
-      source: "website"
     });
   });
+
+  applyLanguage();
+  keepHeroVideoPlaying();
 </script>
 
 </body>
