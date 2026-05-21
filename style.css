@@ -100,8 +100,7 @@ mask-image: radial-gradient(
 }
 
 .channel-choice[hidden] {
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .channel-choice button {
@@ -196,6 +195,12 @@ mask-image: radial-gradient(
     height: 58px;
     margin: auto auto 22px;
     padding: 0 10px 0 18px;
+  }
+
+.channel-choice[hidden] {
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
   }
 
 .request-status {
