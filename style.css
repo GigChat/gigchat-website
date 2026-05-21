@@ -96,10 +96,12 @@ mask-image: radial-gradient(
   justify-content: center;
   gap: 12px;
   margin: -12px 0 28px;
+  transform: translateY(28px);
 }
 
 .channel-choice[hidden] {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .channel-choice button {
@@ -196,6 +198,10 @@ mask-image: radial-gradient(
     padding: 0 10px 0 18px;
   }
 
+.request-status {
+    margin: -10px 0 0;
+  }
+
 .request-bar {
   transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
 }
@@ -243,7 +249,7 @@ mask-image: radial-gradient(
   }
 
   .bottom-copy {
-    margin-top: 0;
+    margin-top: 14px;
     max-width: 390px;
     padding: 0 10px;
   }
