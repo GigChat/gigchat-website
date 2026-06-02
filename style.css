@@ -426,3 +426,51 @@ mask-image: radial-gradient(
     white-space: nowrap;
   }
 }
+
+/* Clean legal links layout */
+.terms {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.3px;
+  text-align: center;
+}
+
+.terms-links {
+  display: block;
+  margin-top: 8px;
+}
+
+.terms-separator {
+  margin: 0 8px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.terms a {
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .terms {
+    max-width: 340px;
+    margin: 0 auto 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    letter-spacing: 0;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .terms-links {
+    display: block;
+    margin-top: 10px;
+  }
+
+  .terms-separator {
+    margin: 0 6px;
+  }
+}
