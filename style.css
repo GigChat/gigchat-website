@@ -264,11 +264,18 @@ mask-image: radial-gradient(
   }
 
   .terms {
-    font-size: 12px;
-    line-height: 1.35;
-    letter-spacing: 0;
-    white-space: nowrap;
-  }
+  max-width: 360px;
+  margin: 0 auto 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  white-space: normal;
+  text-align: center;
+}
+
+.terms a {
+  white-space: nowrap;
+}
 
   .copyright {
     font-size: 12px;
@@ -394,5 +401,28 @@ mask-image: radial-gradient(
     right: 16px;
     padding: 9px 13px;
     font-size: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .bottom-copy {
+    width: calc(100vw - 32px);
+    max-width: 390px;
+    margin-top: 14px;
+    padding: 0 8px;
+  }
+
+  .terms {
+    max-width: 360px;
+    margin: 0 auto 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    letter-spacing: 0;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .terms a {
+    white-space: nowrap;
   }
 }
