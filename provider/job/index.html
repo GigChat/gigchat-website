@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GigChat Location</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    :root {
+      --bg: #050506;
+      --card: #111116;
+      --muted: rgba(255, 255, 255, 0.62);
+      --border: rgba(255, 255, 255, 0.12);
+      --accent: #ff2d55;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(120, 35, 255, 0.24), transparent 34%),
+        var(--bg);
+      color: white;
+      padding: 18px;
+    }
+
+    .wrap {
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      font-size: 14px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 10px 0 14px;
+    }
+
+    .card {
+      background: rgba(17, 17, 22, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+    }
+
+    .top {
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.05;
+    }
+
+    .sub {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .code {
+      display: inline-flex;
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      letter-spacing: 0.05em;
+    }
+
+    .map-shell {
+      position: relative;
+      height: 360px;
+      background: #181818;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    .circle-label {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      z-index: 600;
+      padding: 9px 12px;
+      border-radius: 999px;
+      color: white;
+      background: rgba(0, 0, 0, 0.62);
+      backdrop-filter: blur(10px);
+      font-size: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .bottom {
+      padding: 18px 20px 22px;
+    }
+
+    .notice {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.42;
+      margin-bottom: 16px;
+    }
+
+    .btn {
+      width: 100%;
+      border: 0;
+      border-radius: 16px;
+      padding: 16px 18px;
+      font-size: 17px;
+      font-weight: 800;
+      color: white;
+      background: linear-gradient(135deg, #ff2d55, #7c3cff);
+      box-shadow: 0 14px 34px rgba(255, 45, 85, 0.24);
+      cursor: pointer;
+    }
+
+    .btn:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+    }
+
+    .error {
+      padding: 20px;
+      color: #ffb4c1;
+      line-height: 1.4;
+    }
+
+    .small {
+      margin-top: 14px;
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .leaflet-control-attribution {
+      font-size: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="brand">GigChat</div>
+
+    <div class="card">
+      <div class="top">
+        <h1>Service location</h1>
+        <div id="summary" class="sub">Loading job details...</div>
+        <div id="code" class="code">Location code: ----</div>
+      </div>
+
+      <div class="map-shell">
+        <div class="circle-label">Approximate service area</div>
+        <div id="map"></div>
+      </div>
+
+      <div class="bottom">
+        <div class="notice">
+          This map shows the approximate service area. Tap below when you are ready to navigate to the exact pickup location.
+        </div>
+
+        <button id="navBtn" class="btn" disabled>Start navigating</button>
+
+        <div class="small">
+          Continue using SMS for job actions: reply START when you begin and DONE when complete.
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error" style="display:none;"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const API_BASE = "https://ohpsfazyxduzacwdjyrv.functions.supabase.co/rapid-task";
+
+    const summaryEl = document.getElementById("summary");
+    const codeEl = document.getElementById("code");
+    const navBtn = document.getElementById("navBtn");
+    const errorEl = document.getElementById("error");
+
+    let exactAddress = "";
+    let exactLat = null;
+    let exactLng = null;
+
+    function getToken() {
+      const url = new URL(window.location.href);
+      const queryToken = url.searchParams.get("token");
+      if (queryToken) return queryToken.trim();
+
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      return parts[parts.length - 1] || "";
+    }
+
+    function jobCode(job, token) {
+      if (job && job.id) return String(job.id).slice(0, 8).toUpperCase();
+      return String(token || "").slice(0, 8).toUpperCase();
+    }
+
+    function approximateCoord(lat, lng, token) {
+      const clean = String(token || "gigchat");
+      let seed = 0;
+
+      for (let i = 0; i < clean.length; i++) {
+        seed = (seed + clean.charCodeAt(i) * (i + 1)) % 100000;
+      }
+
+      const angle = (seed % 360) * Math.PI / 180;
+      const distance = 0.0024;
+
+      return {
+        lat: lat + Math.sin(angle) * distance,
+        lng: lng + Math.cos(angle) * distance,
+      };
+    }
+
+    function openNavigation() {
+      if (exactAddress) {
+        window.location.href =
+          "https://www.google.com/maps/dir/?api=1&destination=" +
+          encodeURIComponent(exactAddress);
+        return;
+      }
+
+      if (typeof exactLat === "number" && typeof exactLng === "number") {
+        window.location.href =
+          "https://www.google.com/maps/dir/?api=1&destination=" +
+          encodeURIComponent(exactLat + "," + exactLng);
+      }
+    }
+
+    function renderMap(lat, lng, token) {
+      const approx = approximateCoord(lat, lng, token);
+
+      const map = L.map("map", {
+        zoomControl: false,
+        attributionControl: true,
+        dragging: true,
+        scrollWheelZoom: false,
+      }).setView([approx.lat, approx.lng], 15);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+      }).addTo(map);
+
+      L.circle([approx.lat, approx.lng], {
+        radius: 330,
+        color: "#ff2d55",
+        fillColor: "#ff2d55",
+        fillOpacity: 0.18,
+        weight: 3,
+      }).addTo(map);
+    }
+
+    async function load() {
+      const token = getToken();
+
+      if (!token) {
+        throw new Error("Missing location token.");
+      }
+
+      const res = await fetch(
+        API_BASE + "?task=provider_job_data&token=" + encodeURIComponent(token)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok || !data.job) {
+        throw new Error(data.error || "Job not found.");
+      }
+
+      const job = data.job;
+
+      exactAddress = String(job.pickup_address || "").trim();
+      exactLat = Number(job.service_latitude);
+      exactLng = Number(job.service_longitude);
+
+      summaryEl.textContent = job.summary || "GigChat service request";
+      codeEl.textContent = "Location code: " + jobCode(job, token);
+
+      if (!Number.isFinite(exactLat) || !Number.isFinite(exactLng)) {
+        throw new Error("This job does not have map coordinates yet.");
+      }
+
+      renderMap(exactLat, exactLng, token);
+
+      navBtn.disabled = false;
+      navBtn.addEventListener("click", openNavigation);
+    }
+
+    load().catch((err) => {
+      summaryEl.textContent = "Location unavailable";
+      errorEl.style.display = "block";
+      errorEl.textContent = err.message || "Something went wrong.";
+    });
+  </script>
+</body>
+</html>

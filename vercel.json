@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/provider/job/:token",
+      "destination": "/provider/job/index.html"
+    }
+  ]
+}
