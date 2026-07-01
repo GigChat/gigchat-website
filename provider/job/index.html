@@ -703,12 +703,24 @@
 
       const eta = await sendProviderLocationPing(position);
       updateEtaUI(eta);
-      const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
+
+      let routeLoaded = false;
+      let routeError = "";
+
+      try {
+        routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
+      } catch (err) {
+        routeLoaded = false;
+        routeError = err && err.message ? err.message : String(err || "route render failed");
+        console.warn("ROUTE RENDER FAILED:", err);
+      }
 
       if (routeLoaded && eta && eta.customer_notified) {
         setStatus("Google route loaded. Customer notified.");
       } else if (routeLoaded) {
         setStatus("Google route loaded.");
+      } else if (routeError) {
+        setStatus("Route render failed: " + routeError.slice(0, 120));
       } else if (eta && eta.customer_notified) {
         setStatus("Straight-line fallback. Customer notified.");
       } else {
@@ -759,7 +771,8 @@
         console.warn("LIVE NAVIGATION START FAILED:", err);
         navBtn.disabled = false;
         navBtn.textContent = "Start live navigation";
-        setStatus("Location permission is needed to start live navigation.");
+        const message = err && err.message ? err.message : String(err || "Unknown error");
+        setStatus("Live navigation failed: " + message.slice(0, 140));
       }
     }
 
