@@ -416,6 +416,7 @@
     let serviceMarker = null;
     let providerMarker = null;
     let routeLine = null;
+    let routeGlowLine = null;
     let watchId = null;
     let lastPingAt = 0;
     let lastProviderLatLng = null;
@@ -528,6 +529,103 @@
       }).addTo(map);
     }
 
+    function setRouteLines(points, fitMap) {
+      if (!Array.isArray(points) || points.length < 2) return false;
+
+      if (!routeGlowLine) {
+        routeGlowLine = L.polyline(points, {
+          color: "#ffffff",
+          weight: 12,
+          opacity: 0.86,
+          lineCap: "round",
+          lineJoin: "round",
+        }).addTo(map);
+      } else {
+        routeGlowLine.setLatLngs(points);
+      }
+
+      if (!routeLine) {
+        routeLine = L.polyline(points, {
+          color: "#7c3cff",
+          weight: 6,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round",
+        }).addTo(map);
+      } else {
+        routeLine.setLatLngs(points);
+      }
+
+      if (serviceMarker) serviceMarker.bringToFront();
+      if (providerMarker) providerMarker.bringToFront();
+
+      if (fitMap) {
+        const bounds = L.latLngBounds(points);
+
+        map.fitBounds(bounds, {
+          paddingTopLeft: [80, 170],
+          paddingBottomRight: [80, 180],
+          maxZoom: 16,
+          animate: true,
+        });
+      }
+
+      return true;
+    }
+
+    function drawStraightRouteFallback(lat, lng) {
+      return setRouteLines([[lat, lng], [exactLat, exactLng]], true);
+    }
+
+    function decodeGooglePolyline(encoded) {
+      if (!encoded || typeof encoded !== "string") return [];
+
+      let index = 0;
+      let lat = 0;
+      let lng = 0;
+      const points = [];
+
+      while (index < encoded.length) {
+        let b;
+        let shift = 0;
+        let result = 0;
+
+        do {
+          b = encoded.charCodeAt(index++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20 && index < encoded.length);
+
+        const deltaLat = (result & 1) ? ~(result >> 1) : result >> 1;
+
+        shift = 0;
+        result = 0;
+
+        do {
+          b = encoded.charCodeAt(index++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20 && index < encoded.length);
+
+        const deltaLng = (result & 1) ? ~(result >> 1) : result >> 1;
+
+        lat += deltaLat;
+        lng += deltaLng;
+
+        points.push([lat / 1e5, lng / 1e5]);
+      }
+
+      return points;
+    }
+
+    function drawEncodedRoute(encoded) {
+      const points = decodeGooglePolyline(encoded);
+
+      if (points.length < 2) return false;
+
+      return setRouteLines(points, true);
+    }
+
     function drawProviderPosition(lat, lng) {
       lastProviderLatLng = [lat, lng];
 
@@ -539,27 +637,11 @@
         providerMarker.setLatLng([lat, lng]);
       }
 
-      const destination = [exactLat, exactLng];
-
       if (!routeLine) {
-        routeLine = L.polyline([[lat, lng], destination], {
-          color: "#7c3cff",
-          weight: 6,
-          opacity: 0.82,
-          lineCap: "round",
-          lineJoin: "round",
-        }).addTo(map);
-      } else {
-        routeLine.setLatLngs([[lat, lng], destination]);
+        drawStraightRouteFallback(lat, lng);
       }
 
-      const bounds = L.latLngBounds([[lat, lng], destination]);
-      map.fitBounds(bounds, {
-        paddingTopLeft: [80, 170],
-        paddingBottomRight: [80, 180],
-        maxZoom: 16,
-        animate: true,
-      });
+      if (providerMarker) providerMarker.bringToFront();
     }
 
     async function sendProviderLocationPing(position) {
@@ -606,6 +688,7 @@
 
       const eta = await sendProviderLocationPing(position);
       updateEtaUI(eta);
+      drawEncodedRoute(eta && eta.encoded_polyline);
 
       if (eta && eta.customer_notified) {
         setStatus("Customer notified through preferred channel.");
