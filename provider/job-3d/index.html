@@ -382,6 +382,65 @@
       z-index: -1;
     }
 
+
+    /* Provider 3D polish v3 */
+    .nav-arrow-marker {
+      filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.26));
+    }
+
+    .nav-arrow-marker::after {
+      left: 50%;
+      top: 58%;
+      width: 58px;
+      height: 58px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background:
+        radial-gradient(circle, rgba(124, 60, 255, 0.28) 0%, rgba(124, 60, 255, 0.16) 42%, rgba(124, 60, 255, 0) 72%);
+      z-index: -1;
+    }
+
+    .eta-chip {
+      background: rgba(16, 22, 32, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 55px rgba(0, 0, 0, 0.42);
+    }
+
+    .recenter {
+      display: grid;
+      place-items: center;
+      position: absolute;
+      font-size: 0;
+      line-height: 0;
+      overflow: hidden;
+    }
+
+    .recenter::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 24px;
+      height: 24px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.86);
+    }
+
+    .recenter::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 34px;
+      height: 34px;
+      transform: translate(-50%, -50%);
+      background:
+        linear-gradient(90deg, transparent 0 47%, rgba(255, 255, 255, 0.86) 47% 53%, transparent 53% 100%),
+        linear-gradient(0deg, transparent 0 47%, rgba(255, 255, 255, 0.86) 47% 53%, transparent 53% 100%);
+      opacity: 0.92;
+    }
+
   </style>
 </head>
 
