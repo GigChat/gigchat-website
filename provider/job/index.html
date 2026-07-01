@@ -417,6 +417,7 @@
     let providerMarker = null;
     let routeLine = null;
     let routeGlowLine = null;
+    let latestRoutePoints = [];
     let watchId = null;
     let lastPingAt = 0;
     let lastProviderLatLng = null;
@@ -529,8 +530,70 @@
       }).addTo(map);
     }
 
+    function closestPointOnSegment(p, a, b) {
+      const apx = p.x - a.x;
+      const apy = p.y - a.y;
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const ab2 = abx * abx + aby * aby;
+
+      if (ab2 === 0) return a;
+
+      let t = (apx * abx + apy * aby) / ab2;
+      t = Math.max(0, Math.min(1, t));
+
+      return L.point(a.x + abx * t, a.y + aby * t);
+    }
+
+    function nearestRoutePoint(lat, lng) {
+      if (!Array.isArray(latestRoutePoints) || latestRoutePoints.length < 2 || !map) {
+        return [lat, lng];
+      }
+
+      const providerPoint = map.latLngToLayerPoint([lat, lng]);
+      let bestLayerPoint = null;
+      let bestDistance = Infinity;
+
+      for (let i = 0; i < latestRoutePoints.length - 1; i++) {
+        const a = map.latLngToLayerPoint(latestRoutePoints[i]);
+        const b = map.latLngToLayerPoint(latestRoutePoints[i + 1]);
+        const candidate = closestPointOnSegment(providerPoint, a, b);
+        const dx = providerPoint.x - candidate.x;
+        const dy = providerPoint.y - candidate.y;
+        const distance = dx * dx + dy * dy;
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestLayerPoint = candidate;
+        }
+      }
+
+      if (!bestLayerPoint) return [lat, lng];
+
+      const snapped = map.layerPointToLatLng(bestLayerPoint);
+      return [snapped.lat, snapped.lng];
+    }
+
+    function moveProviderMarker(lat, lng, snapToRoute) {
+      const displayPoint = snapToRoute ? nearestRoutePoint(lat, lng) : [lat, lng];
+      lastProviderLatLng = displayPoint;
+
+      if (!providerMarker) {
+        providerMarker = L.marker(displayPoint, {
+          icon: providerIcon(),
+        }).addTo(map);
+      } else {
+        providerMarker.setLatLng(displayPoint);
+      }
+
+      if (providerMarker && typeof providerMarker.setZIndexOffset === "function") {
+        providerMarker.setZIndexOffset(1000);
+      }
+    }
     function setRouteLines(points, fitMap) {
       if (!Array.isArray(points) || points.length < 2) return false;
+
+      latestRoutePoints = points;
 
       if (!routeGlowLine) {
         routeGlowLine = L.polyline(points, {
@@ -618,45 +681,20 @@
       return points;
     }
 
-    function simplifyRoutePoints(points, maxPoints) {
-      if (!Array.isArray(points) || points.length <= maxPoints) return points;
-
-      const step = Math.ceil(points.length / maxPoints);
-      const simplified = [];
-
-      for (let i = 0; i < points.length; i += step) {
-        simplified.push(points[i]);
-      }
-
-      simplified.push(points[points.length - 1]);
-      return simplified;
-    }
-
     function drawEncodedRoute(encoded) {
       const points = decodeGooglePolyline(encoded);
 
       if (points.length < 2) return false;
 
-      const displayPoints = simplifyRoutePoints(points, 1800);
-      return setRouteLines(displayPoints, true);
+      return setRouteLines(points, true);
     }
 
     function drawProviderPosition(lat, lng) {
-      lastProviderLatLng = [lat, lng];
-
-      if (!providerMarker) {
-        providerMarker = L.marker([lat, lng], {
-          icon: providerIcon(),
-        }).addTo(map);
-      } else {
-        providerMarker.setLatLng([lat, lng]);
-      }
+      moveProviderMarker(lat, lng, Boolean(routeLine));
 
       if (!routeLine) {
         drawStraightRouteFallback(lat, lng);
       }
-
-      if (providerMarker && typeof providerMarker.setZIndexOffset === "function") providerMarker.setZIndexOffset(1000);
     }
 
     async function sendProviderLocationPing(position) {
