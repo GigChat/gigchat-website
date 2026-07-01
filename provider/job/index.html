@@ -422,6 +422,7 @@
     let lastPingAt = 0;
     let lastProviderLatLng = null;
     let wakeLock = null;
+    let followProvider = false;
 
     function getToken() {
       const url = new URL(window.location.href);
@@ -589,6 +590,10 @@
       if (providerMarker && typeof providerMarker.setZIndexOffset === "function") {
         providerMarker.setZIndexOffset(1000);
       }
+
+      if (followProvider && map) {
+        map.setView(displayPoint, 17, { animate: true });
+      }
     }
     function setRouteLines(points, fitMap) {
       if (!Array.isArray(points) || points.length < 2) return false;
@@ -686,15 +691,11 @@
 
       if (points.length < 2) return false;
 
-      return setRouteLines(points, true);
+      return setRouteLines(points, false);
     }
 
     function drawProviderPosition(lat, lng) {
       moveProviderMarker(lat, lng, Boolean(routeLine));
-
-      if (!routeLine) {
-        drawStraightRouteFallback(lat, lng);
-      }
     }
 
     async function sendProviderLocationPing(position) {
@@ -772,6 +773,7 @@
       setStatus("Requesting location permission...");
 
       try {
+        followProvider = true;
         await requestWakeLock();
 
         const position = await getProviderPosition();
@@ -815,8 +817,16 @@
     }
 
     function recenter() {
+      followProvider = true;
+
+      if (providerMarker && typeof providerMarker.getLatLng === "function") {
+        const markerPosition = providerMarker.getLatLng();
+        map.setView(markerPosition, 17, { animate: true });
+        return;
+      }
+
       if (lastProviderLatLng) {
-        map.setView(lastProviderLatLng, 16, { animate: true });
+        map.setView(lastProviderLatLng, 17, { animate: true });
         return;
       }
 
@@ -863,6 +873,7 @@
 
     document.addEventListener("visibilitychange", async () => {
       if (document.visibilityState === "visible" && wakeLock === null && watchId !== null) {
+        followProvider = true;
         await requestWakeLock();
       }
     });
