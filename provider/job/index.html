@@ -618,12 +618,27 @@
       return points;
     }
 
+    function simplifyRoutePoints(points, maxPoints) {
+      if (!Array.isArray(points) || points.length <= maxPoints) return points;
+
+      const step = Math.ceil(points.length / maxPoints);
+      const simplified = [];
+
+      for (let i = 0; i < points.length; i += step) {
+        simplified.push(points[i]);
+      }
+
+      simplified.push(points[points.length - 1]);
+      return simplified;
+    }
+
     function drawEncodedRoute(encoded) {
       const points = decodeGooglePolyline(encoded);
 
       if (points.length < 2) return false;
 
-      return setRouteLines(points, true);
+      const displayPoints = simplifyRoutePoints(points, 1800);
+      return setRouteLines(displayPoints, true);
     }
 
     function drawProviderPosition(lat, lng) {
@@ -688,12 +703,16 @@
 
       const eta = await sendProviderLocationPing(position);
       updateEtaUI(eta);
-      drawEncodedRoute(eta && eta.encoded_polyline);
+      const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
 
-      if (eta && eta.customer_notified) {
-        setStatus("Customer notified through preferred channel.");
+      if (routeLoaded && eta && eta.customer_notified) {
+        setStatus("Google route loaded. Customer notified.");
+      } else if (routeLoaded) {
+        setStatus("Google route loaded.");
+      } else if (eta && eta.customer_notified) {
+        setStatus("Straight-line fallback. Customer notified.");
       } else {
-        setStatus("Live ETA updated.");
+        setStatus("Straight-line fallback.");
       }
     }
 
