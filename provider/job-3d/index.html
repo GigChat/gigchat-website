@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>GigChat 3D Navigation</title>
+  <title>GigChat Navigation</title>
 
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 
@@ -289,6 +289,65 @@
     .maplibregl-ctrl-bottom-right {
       display: none;
     }
+
+    /* GigChat 3D navigation dark mode v2 */
+    body,
+    .screen {
+      background: #0b1220;
+      color: #ffffff;
+    }
+
+    .map-veil {
+      background:
+        linear-gradient(180deg, rgba(9, 14, 24, 0.08), rgba(9, 14, 24, 0.18)),
+        radial-gradient(circle at 50% 60%, rgba(124, 60, 255, 0.05), rgba(5, 9, 16, 0.24));
+    }
+
+    .top-pill,
+    .turn-card {
+      display: none;
+    }
+
+    .provider-arrow {
+      display: none;
+    }
+
+    .screen.live .provider-arrow {
+      display: block;
+    }
+
+    .bottom-sheet {
+      background: rgba(16, 22, 32, 0.94);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 55px rgba(0, 0, 0, 0.42);
+    }
+
+    .metric strong {
+      color: #ffffff;
+    }
+
+    .metric span,
+    .status {
+      color: rgba(255, 255, 255, 0.64);
+    }
+
+    .start-btn {
+      background: linear-gradient(135deg, #ff405f 0%, #ff7a59 100%);
+      box-shadow: 0 18px 36px rgba(255, 64, 95, 0.24);
+    }
+
+    .eta-chip {
+      background: rgba(8, 10, 15, 0.92);
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
+    }
+
+    .recenter {
+      background: rgba(20, 26, 36, 0.94);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
   </style>
 </head>
 
@@ -299,14 +358,14 @@
 
     <div class="top-pill">
       <div class="g-mark">G</div>
-      <div>3D Navigation</div>
+      <div>Navigation</div>
     </div>
 
     <section class="turn-card">
       <div class="turn-icon">&#8599;</div>
       <div>
         <div id="turnMain" class="turn-main">Ready to start</div>
-        <div id="turnSub" class="turn-sub">3D live route inside GigChat</div>
+        <div id="turnSub" class="turn-sub">Live route inside GigChat</div>
       </div>
     </section>
 
@@ -323,11 +382,11 @@
       <div class="bottom-row">
         <div class="metric">
           <strong id="etaMain">Ready</strong>
-          <span id="distanceMain">Secure 3D navigation</span>
+          <span id="distanceMain">Secure navigation</span>
         </div>
 
         <button id="navBtn" class="start-btn" disabled type="button">
-          Start 3D navigation
+          Start
         </button>
       </div>
 
@@ -351,6 +410,7 @@
     const turnMainEl = document.getElementById("turnMain");
     const turnSubEl = document.getElementById("turnSub");
     const recenterBtn = document.getElementById("recenterBtn");
+    const screenEl = document.querySelector(".screen");
 
     let currentToken = "";
     let exactLat = null;
@@ -399,7 +459,7 @@
         etaChipEl.textContent = minutes + " min";
         etaMainEl.textContent = minutes + " min";
         turnMainEl.textContent = "Live navigation active";
-        turnSubEl.textContent = "3D route updated through GigChat";
+        turnSubEl.textContent = "Route updated through GigChat";
       }
 
       if (Number.isFinite(distance)) {
@@ -518,11 +578,12 @@
             type: "raster",
             source: "osm",
             paint: {
-              "raster-opacity": 0.5,
-              "raster-saturation": -0.72,
-              "raster-contrast": -0.12,
-              "raster-brightness-min": 0.14,
-              "raster-brightness-max": 1.0,
+              "raster-opacity": 0.9,
+              "raster-saturation": -0.65,
+              "raster-hue-rotate": 210,
+              "raster-contrast": 0.28,
+              "raster-brightness-min": 0.0,
+              "raster-brightness-max": 0.34,
             },
           }],
         },
@@ -550,9 +611,9 @@
             "line-join": "round",
           },
           paint: {
-            "line-color": "#ffffff",
-            "line-width": 16,
-            "line-opacity": 0.86,
+            "line-color": "#ffb3bd",
+            "line-width": 18,
+            "line-opacity": 0.46,
           },
         });
 
@@ -565,8 +626,8 @@
             "line-join": "round",
           },
           paint: {
-            "line-color": "#7c3cff",
-            "line-width": 8,
+            "line-color": "#ff405f",
+            "line-width": 9,
             "line-opacity": 0.95,
           },
         });
@@ -590,11 +651,11 @@
           type: "circle",
           source: "destination",
           paint: {
-            "circle-radius": 12,
+            "circle-radius": 0,
             "circle-color": "#7c3cff",
             "circle-stroke-width": 6,
             "circle-stroke-color": "#ffffff",
-            "circle-opacity": 0.92,
+            "circle-opacity": 0,
           },
         });
 
@@ -742,7 +803,7 @@
       if (!shouldPing) return;
 
       lastPingAt = now;
-      setStatus("Updating 3D live ETA...");
+      setStatus("Updating live ETA...");
 
       const eta = await sendProviderLocationPing(position);
       updateEtaUI(eta);
@@ -751,9 +812,9 @@
       updateProviderCamera(coords.latitude, coords.longitude);
 
       if (routeLoaded && eta && eta.customer_notified) {
-        setStatus("3D Google route loaded. Customer notified.");
+        setStatus("Route loaded. Customer notified.");
       } else if (routeLoaded) {
-        setStatus("3D Google route loaded.");
+        setStatus("Route loaded.");
       } else {
         setStatus("Waiting for 3D route.");
       }
@@ -766,14 +827,15 @@
 
       try {
         followProvider = true;
+        if (screenEl) screenEl.classList.add("live");
         await requestWakeLock();
 
         const position = await getProviderPosition();
         await handlePosition(position, true);
 
         turnMainEl.textContent = "Live navigation active";
-        turnSubEl.textContent = "Keep this page open for 3D route";
-        navBtn.textContent = "3D navigation on";
+        turnSubEl.textContent = "Keep this page open for live route";
+        navBtn.textContent = "Navigation on";
         navBtn.disabled = true;
 
         if (watchId !== null) {
@@ -786,12 +848,12 @@
               await handlePosition(nextPosition, false);
             } catch (err) {
               console.warn("3D LIVE ETA UPDATE FAILED:", err);
-              setStatus("3D live ETA paused. Checking again...");
+              setStatus("Live ETA paused. Checking again...");
             }
           },
           (err) => {
             console.warn("LOCATION WATCH FAILED:", err);
-            setStatus("Location permission is needed for 3D live ETA.");
+            setStatus("Location permission is needed for live ETA.");
           },
           {
             enableHighAccuracy: true,
@@ -802,9 +864,9 @@
       } catch (err) {
         console.warn("3D LIVE NAVIGATION START FAILED:", err);
         navBtn.disabled = false;
-        navBtn.textContent = "Start 3D navigation";
+        navBtn.textContent = "Start";
         const message = err && err.message ? err.message : String(err || "Unknown error");
-        setStatus("3D navigation failed: " + message.slice(0, 140));
+        setStatus("Navigation failed: " + message.slice(0, 140));
       }
     }
 
@@ -853,7 +915,7 @@
       navBtn.addEventListener("click", startLiveNavigation);
       recenterBtn.addEventListener("click", recenter);
 
-      setStatus("Tap Start 3D navigation when you are on the way.");
+      setStatus("Tap Start when you are on the way.");
     }
 
     document.addEventListener("visibilitychange", async () => {
