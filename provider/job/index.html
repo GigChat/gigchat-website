@@ -556,8 +556,8 @@
         routeLine.setLatLngs(points);
       }
 
-      if (serviceMarker) serviceMarker.bringToFront();
-      if (providerMarker) providerMarker.bringToFront();
+      if (serviceMarker && typeof serviceMarker.setZIndexOffset === "function") serviceMarker.setZIndexOffset(900);
+      if (providerMarker && typeof providerMarker.setZIndexOffset === "function") providerMarker.setZIndexOffset(1000);
 
       if (fitMap) {
         const bounds = L.latLngBounds(points);
@@ -656,7 +656,7 @@
         drawStraightRouteFallback(lat, lng);
       }
 
-      if (providerMarker) providerMarker.bringToFront();
+      if (providerMarker && typeof providerMarker.setZIndexOffset === "function") providerMarker.setZIndexOffset(1000);
     }
 
     async function sendProviderLocationPing(position) {
