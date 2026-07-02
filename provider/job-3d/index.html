@@ -510,6 +510,105 @@
       z-index: 3;
     }
 
+
+    /* GPS turn-by-turn banner v15 */
+    .gps-banner {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: calc(14px + env(safe-area-inset-top));
+      z-index: 30;
+      min-height: 92px;
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: 24px;
+      background: rgba(13, 18, 27, 0.94);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 22px 55px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+
+    .gps-icon {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 35% 25%, rgba(255,255,255,0.38), rgba(255,255,255,0) 34%),
+        linear-gradient(145deg, #ff7b8d 0%, #ff405f 48%, #e9284d 100%);
+      color: #ffffff;
+      font-size: 34px;
+      font-weight: 950;
+      line-height: 1;
+      box-shadow:
+        inset 0 4px 8px rgba(255, 255, 255, 0.30),
+        inset 0 -7px 11px rgba(130, 0, 25, 0.30),
+        0 0 18px rgba(255, 64, 95, 0.36);
+    }
+
+    .gps-copy {
+      min-width: 0;
+    }
+
+    .gps-distance {
+      font-size: 17px;
+      font-weight: 950;
+      color: #ff7b8d;
+      letter-spacing: 0.01em;
+      margin-bottom: 4px;
+    }
+
+    .gps-instruction {
+      font-size: 20px;
+      line-height: 1.08;
+      font-weight: 950;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .gps-sub {
+      margin-top: 5px;
+      font-size: 13px;
+      line-height: 1.18;
+      font-weight: 750;
+      color: rgba(255, 255, 255, 0.66);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .gps-banner.waiting .gps-icon {
+      background: rgba(255, 255, 255, 0.10);
+      box-shadow: none;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    @media (max-width: 390px) {
+      .gps-banner {
+        grid-template-columns: 58px 1fr;
+        min-height: 86px;
+        padding: 12px 14px;
+      }
+
+      .gps-icon {
+        width: 52px;
+        height: 52px;
+        font-size: 30px;
+      }
+
+      .gps-instruction {
+        font-size: 18px;
+      }
+    }
+
   </style>
 </head>
 
@@ -532,6 +631,16 @@
     </section>
 
     <div class="provider-arrow" aria-hidden="true"></div>
+
+
+    <section id="gpsBanner" class="gps-banner waiting" aria-live="polite">
+      <div id="gpsIcon" class="gps-icon">↑</div>
+      <div class="gps-copy">
+        <div id="gpsDistance" class="gps-distance">Waiting for route</div>
+        <div id="gpsInstruction" class="gps-instruction">Start navigation</div>
+        <div id="gpsSub" class="gps-sub">GigChat will show the next turn here</div>
+      </div>
+    </section>
 
     <div class="eta-chip">
       <span id="etaChip">--</span>
@@ -569,6 +678,11 @@
     const etaChipEl = document.getElementById("etaChip");
     const etaMainEl = document.getElementById("etaMain");
     const distanceMainEl = document.getElementById("distanceMain");
+    const gpsBannerEl = document.getElementById("gpsBanner");
+    const gpsIconEl = document.getElementById("gpsIcon");
+    const gpsDistanceEl = document.getElementById("gpsDistance");
+    const gpsInstructionEl = document.getElementById("gpsInstruction");
+    const gpsSubEl = document.getElementById("gpsSub");
     const turnMainEl = document.getElementById("turnMain");
     const turnSubEl = document.getElementById("turnSub");
     const recenterBtn = document.getElementById("recenterBtn");
@@ -614,6 +728,112 @@
       return Math.round(miles) + " mi";
     }
 
+
+    function maneuverIcon(maneuver) {
+      const value = String(maneuver || "").toUpperCase();
+
+      if (value.includes("LEFT")) return "↰";
+      if (value.includes("RIGHT")) return "↱";
+      if (value.includes("ROUNDABOUT")) return "↻";
+      if (value.includes("RAMP")) return "↱";
+      if (value.includes("MERGE")) return "⇢";
+      if (value.includes("DEPART")) return "↑";
+      if (value.includes("ARRIVE")) return "✓";
+      if (value.includes("UTURN")) return "↶";
+
+      return "↑";
+    }
+
+    function cleanGpsInstruction(value) {
+      return String(value || "")
+        .replace(/\s+/g, " ")
+        .replace(/\bToll road\b/gi, "")
+        .replace(/\bDestination will be on the right\b/gi, "Destination on the right")
+        .replace(/\bDestination will be on the left\b/gi, "Destination on the left")
+        .trim();
+    }
+
+    function splitGpsInstruction(instruction) {
+      const clean = cleanGpsInstruction(instruction);
+      if (!clean) {
+        return {
+          main: "Continue",
+          sub: "Follow GigChat route",
+        };
+      }
+
+      const towardIndex = clean.toLowerCase().indexOf(" toward ");
+      if (towardIndex > 0) {
+        return {
+          main: clean.slice(0, towardIndex).trim(),
+          sub: clean.slice(towardIndex + 1).trim(),
+        };
+      }
+
+      const continueIndex = clean.toLowerCase().indexOf(" continue to follow ");
+      if (continueIndex > 0) {
+        return {
+          main: clean.slice(0, continueIndex).trim(),
+          sub: clean.slice(continueIndex + 1).trim(),
+        };
+      }
+
+      const destinationIndex = clean.toLowerCase().indexOf(" destination ");
+      if (destinationIndex > 0) {
+        return {
+          main: clean.slice(0, destinationIndex).trim(),
+          sub: clean.slice(destinationIndex).trim(),
+        };
+      }
+
+      return {
+        main: clean,
+        sub: "Live route updated by GigChat",
+      };
+    }
+
+    function formatStepDistance(meters) {
+      const value = Number(meters);
+      if (!Number.isFinite(value)) return "";
+
+      if (value < 1000) {
+        return Math.max(1, Math.round(value)) + " m";
+      }
+
+      return (value / 1000).toFixed(value < 10000 ? 1 : 0) + " km";
+    }
+
+    function updateGpsBanner(data) {
+      if (!gpsBannerEl || !gpsIconEl || !gpsDistanceEl || !gpsInstructionEl || !gpsSubEl) {
+        return;
+      }
+
+      const instruction = data && data.next_instruction ? String(data.next_instruction) : "";
+      const maneuver = data && data.next_maneuver ? String(data.next_maneuver) : "";
+      const distanceMeters =
+        data && data.next_step_distance_meters !== undefined
+          ? Number(data.next_step_distance_meters)
+          : null;
+
+      if (!instruction) {
+        gpsBannerEl.classList.add("waiting");
+        gpsIconEl.textContent = "↑";
+        gpsDistanceEl.textContent = "Waiting for route";
+        gpsInstructionEl.textContent = "Start navigation";
+        gpsSubEl.textContent = "GigChat will show the next turn here";
+        return;
+      }
+
+      const parts = splitGpsInstruction(instruction);
+
+      gpsBannerEl.classList.remove("waiting");
+      gpsIconEl.textContent = maneuverIcon(maneuver);
+      gpsDistanceEl.textContent = formatStepDistance(distanceMeters) || "Next";
+      gpsInstructionEl.textContent = parts.main;
+      gpsSubEl.textContent = parts.sub;
+    }
+
+
     function updateEtaUI(data) {
       const minutes = data && data.eta_minutes ? Number(data.eta_minutes) : null;
       const distance = data && data.eta_distance_meters ? Number(data.eta_distance_meters) : null;
@@ -628,6 +848,8 @@
       if (Number.isFinite(distance)) {
         distanceMainEl.textContent = formatDistance(distance) + " remaining";
       }
+
+      updateGpsBanner(data);
     }
 
     function getProviderPosition() {
