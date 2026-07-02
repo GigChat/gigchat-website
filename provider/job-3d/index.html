@@ -464,6 +464,9 @@
         linear-gradient(180deg, rgba(5, 9, 16, 0.00), rgba(5, 9, 16, 0.04)) !important;
     }
 
+
+    /* Soften dark map black blocks v12 */
+
   </style>
 </head>
 
@@ -719,6 +722,15 @@
 
           if (layer.type === "line") {
             if (
+              id.includes("tunnel") ||
+              id.includes("bridge") ||
+              id.includes("case") ||
+              id.includes("casing")
+            ) {
+              map.setPaintProperty(layer.id, "line-color", "#455b72");
+              map.setPaintProperty(layer.id, "line-opacity", 0.72);
+            }
+            if (
               id.includes("road") ||
               id.includes("street") ||
               id.includes("highway") ||
@@ -735,9 +747,9 @@
           if (layer.type === "symbol") {
             if (map.getPaintProperty(layer.id, "text-color") !== undefined) {
               map.setPaintProperty(layer.id, "text-color", "#f7faff");
-              map.setPaintProperty(layer.id, "text-halo-color", "#101923");
-              map.setPaintProperty(layer.id, "text-halo-width", 1.8);
-              map.setPaintProperty(layer.id, "text-halo-blur", 0.55);
+              map.setPaintProperty(layer.id, "text-halo-color", "#203041");
+              map.setPaintProperty(layer.id, "text-halo-width", 1.25);
+              map.setPaintProperty(layer.id, "text-halo-blur", 0.35);
               map.setPaintProperty(layer.id, "text-opacity", 0.96);
             }
 
