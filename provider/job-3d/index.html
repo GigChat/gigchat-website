@@ -753,42 +753,95 @@
         .trim();
     }
 
+    function shortActionFromInstruction(clean) {
+      const value = String(clean || "").trim();
+
+      const lower = value.toLowerCase();
+
+      if (lower.startsWith("head ")) {
+        const onIndex = lower.indexOf(" on ");
+        return onIndex > 0 ? value.slice(0, onIndex).trim() : "Continue";
+      }
+
+      if (lower.startsWith("turn left")) return "Turn left";
+      if (lower.startsWith("turn right")) return "Turn right";
+      if (lower.startsWith("slight left")) return "Slight left";
+      if (lower.startsWith("slight right")) return "Slight right";
+      if (lower.startsWith("keep left")) return "Keep left";
+      if (lower.startsWith("keep right")) return "Keep right";
+      if (lower.startsWith("merge")) return "Merge";
+      if (lower.startsWith("take the exit")) return "Take exit";
+      if (lower.startsWith("at the roundabout")) return "Roundabout";
+      if (lower.startsWith("continue")) return "Continue";
+      if (lower.startsWith("arrive")) return "Arrive";
+
+      return "Continue";
+    }
+
+    function extractStreetFromInstruction(clean) {
+      const value = String(clean || "").trim();
+      const lower = value.toLowerCase();
+
+      const patterns = [
+        " onto ",
+        " on ",
+        " toward ",
+        " merge onto ",
+        " stay on ",
+        " follow ",
+      ];
+
+      let selectedIndex = -1;
+      let selectedPattern = "";
+
+      for (const pattern of patterns) {
+        const index = lower.indexOf(pattern);
+        if (index >= 0 && (selectedIndex === -1 || index < selectedIndex)) {
+          selectedIndex = index;
+          selectedPattern = pattern;
+        }
+      }
+
+      if (selectedIndex === -1) return value;
+
+      let street = value.slice(selectedIndex + selectedPattern.length).trim();
+
+      street = street
+        .replace(/^and stay on\s+/i, "")
+        .replace(/^to stay on\s+/i, "")
+        .replace(/^the\s+/i, "")
+        .replace(/\bToll road\b/gi, "")
+        .replace(/\bContinue to follow\b.*$/i, "")
+        .replace(/\bDestination on the right\b/gi, "")
+        .replace(/\bDestination on the left\b/gi, "")
+        .trim();
+
+      const towardIndex = street.toLowerCase().indexOf(" toward ");
+      if (towardIndex > 0) {
+        street = street.slice(0, towardIndex).trim();
+      }
+
+      const slashParts = street.split("/");
+      if (slashParts.length > 2) {
+        street = slashParts.slice(0, 2).join(" / ");
+      }
+
+      return street || value;
+    }
+
     function splitGpsInstruction(instruction) {
       const clean = cleanGpsInstruction(instruction);
+
       if (!clean) {
         return {
-          main: "Continue",
-          sub: "Follow GigChat route",
-        };
-      }
-
-      const towardIndex = clean.toLowerCase().indexOf(" toward ");
-      if (towardIndex > 0) {
-        return {
-          main: clean.slice(0, towardIndex).trim(),
-          sub: clean.slice(towardIndex + 1).trim(),
-        };
-      }
-
-      const continueIndex = clean.toLowerCase().indexOf(" continue to follow ");
-      if (continueIndex > 0) {
-        return {
-          main: clean.slice(0, continueIndex).trim(),
-          sub: clean.slice(continueIndex + 1).trim(),
-        };
-      }
-
-      const destinationIndex = clean.toLowerCase().indexOf(" destination ");
-      if (destinationIndex > 0) {
-        return {
-          main: clean.slice(0, destinationIndex).trim(),
-          sub: clean.slice(destinationIndex).trim(),
+          main: "Start navigation",
+          sub: "GigChat will show the next turn here",
         };
       }
 
       return {
-        main: clean,
-        sub: "Live route updated by GigChat",
+        main: extractStreetFromInstruction(clean),
+        sub: shortActionFromInstruction(clean),
       };
     }
 
