@@ -441,27 +441,6 @@
       opacity: 0.92;
     }
 
-
-    /* Dark map white labels v4 */
-    .map-veil {
-      background:
-        linear-gradient(180deg, rgba(9, 14, 24, 0.03), rgba(9, 14, 24, 0.10)) !important;
-    }
-
-
-    /* Dark map readability v5 */
-    .map-veil {
-      background:
-        linear-gradient(180deg, rgba(9, 14, 24, 0.00), rgba(9, 14, 24, 0.04)) !important;
-    }
-
-
-    /* Dark map visibility v6 */
-    .map-veil {
-      background:
-        linear-gradient(180deg, rgba(9, 14, 24, 0.00), rgba(9, 14, 24, 0.02)) !important;
-    }
-
   </style>
 </head>
 
@@ -683,7 +662,7 @@
           sources: {
             osm: {
               type: "raster",
-              tiles: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
               tileSize: 256,
               attribution: "OpenStreetMap",
             },
@@ -693,12 +672,12 @@
             type: "raster",
             source: "osm",
             paint: {
-              "raster-opacity": 1.0,
-              "raster-saturation": 0.0,
-              "raster-hue-rotate": 0,
-              "raster-contrast": 0.18,
-              "raster-brightness-min": 0.18,
-              "raster-brightness-max": 1.65,
+              "raster-opacity": 0.9,
+              "raster-saturation": -0.65,
+              "raster-hue-rotate": 210,
+              "raster-contrast": 0.28,
+              "raster-brightness-min": 0.0,
+              "raster-brightness-max": 0.34,
             },
           }],
         },
