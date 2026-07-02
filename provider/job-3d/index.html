@@ -467,6 +467,49 @@
 
     /* Soften dark map black blocks v12 */
 
+
+    /* Red guide-color 3D provider arrow v14 */
+    .nav-arrow-marker {
+      width: 86px;
+      height: 86px;
+      pointer-events: none;
+      filter:
+        drop-shadow(0 10px 8px rgba(0, 0, 0, 0.34))
+        drop-shadow(0 0 20px rgba(255, 64, 95, 0.34));
+    }
+
+    .nav-arrow-marker::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 78px;
+      height: 78px;
+      transform: translate(-50%, -50%);
+      background: #ffffff;
+      clip-path: polygon(50% 3%, 91% 89%, 50% 71%, 9% 89%);
+      filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.28));
+      z-index: 2;
+    }
+
+    .nav-arrow-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 59px;
+      height: 59px;
+      transform: translate(-50%, -52%);
+      background:
+        linear-gradient(145deg, #ff7b8d 0%, #ff405f 48%, #e9284d 100%);
+      clip-path: polygon(50% 4%, 90% 88%, 50% 70%, 10% 88%);
+      box-shadow:
+        inset 0 4px 8px rgba(255, 255, 255, 0.42),
+        inset 0 -7px 11px rgba(130, 0, 25, 0.30),
+        0 0 16px rgba(255, 64, 95, 0.42);
+      z-index: 3;
+    }
+
   </style>
 </head>
 
