@@ -449,6 +449,14 @@
         radial-gradient(circle at 50% 60%, rgba(124, 60, 255, 0.04), rgba(5, 9, 16, 0.14)) !important;
     }
 
+
+    /* Dark readable map v10 */
+    .map-veil {
+      background:
+        linear-gradient(180deg, rgba(5, 9, 16, 0.02), rgba(5, 9, 16, 0.08)),
+        radial-gradient(circle at 50% 65%, rgba(124, 60, 255, 0.04), rgba(5, 9, 16, 0.08)) !important;
+    }
+
   </style>
 </head>
 
@@ -670,7 +678,7 @@
           sources: {
             osm: {
               type: "raster",
-              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tiles: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
               tileSize: 256,
               attribution: "OpenStreetMap",
             },
@@ -680,12 +688,12 @@
             type: "raster",
             source: "osm",
             paint: {
-              "raster-opacity": 0.96,
-              "raster-saturation": -0.65,
-              "raster-hue-rotate": 210,
-              "raster-contrast": 0.18,
+              "raster-opacity": 1.0,
+              "raster-saturation": 0.0,
+              "raster-hue-rotate": 0,
+              "raster-contrast": 0.08,
               "raster-brightness-min": 0.0,
-              "raster-brightness-max": 0.48,
+              "raster-brightness-max": 1.0,
             },
           }],
         },
