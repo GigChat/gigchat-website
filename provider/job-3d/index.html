@@ -887,6 +887,48 @@
     }
 
 
+
+    async function requestScreenWakeLock() {
+      navigationWakeLockRequested = true;
+
+      if (!("wakeLock" in navigator)) {
+        console.warn("Screen Wake Lock API is not available in this browser.");
+        return false;
+      }
+
+      try {
+        if (wakeLock) return true;
+
+        wakeLock = await navigator.wakeLock.request("screen");
+
+        wakeLock.addEventListener("release", () => {
+          wakeLock = null;
+          console.log("GigChat screen wake lock released.");
+        });
+
+        console.log("GigChat screen wake lock active.");
+        return true;
+      } catch (err) {
+        console.warn("GigChat screen wake lock failed:", err);
+        wakeLock = null;
+        return false;
+      }
+    }
+
+    async function restoreScreenWakeLockIfNeeded() {
+      if (!navigationWakeLockRequested) return;
+      if (document.visibilityState !== "visible") return;
+
+      await requestScreenWakeLock();
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        restoreScreenWakeLockIfNeeded();
+      }
+    });
+
+
     function updateEtaUI(data) {
       const minutes = data && data.eta_minutes ? Number(data.eta_minutes) : null;
       const distance = data && data.eta_distance_meters ? Number(data.eta_distance_meters) : null;
