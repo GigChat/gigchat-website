@@ -703,6 +703,13 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Route Progress v17
+    let fullRouteLinePoints = [];
+    let routeProgressLastIndex = 0;
+    let routeProgressLastUpdateAt = 0;
+
+    const ROUTE_PROGRESS_UPDATE_INTERVAL_MS = 120;
+
     // Smooth Provider Navigation v16
     let smoothProviderPoint = null;
     let smoothProviderBearing = 0;
@@ -1372,7 +1379,9 @@
       if (points.length < 2 || !map || !map.getSource("route")) return false;
 
       routePoints = points;
-      map.getSource("route").setData(routeGeoJson(points));
+      fullRouteLinePoints = Array.isArray(points) ? points.slice() : [];
+      routeProgressLastIndex = 0;
+      map.getSource("route").setData(routeGeoJson(fullRouteLinePoints));
 
       return true;
     }
@@ -1499,6 +1508,7 @@
         smoothProviderPoint = target;
         smoothProviderBearing = target[2];
         setProviderMarker(target[0], target[1], smoothProviderBearing);
+        updateRouteProgressFromProvider(target[0], target[1], true);
         return;
       }
 
@@ -1536,6 +1546,7 @@
         smoothProviderBearing = currentBearing;
 
         setProviderMarker(currentLng, currentLat, currentBearing);
+        updateRouteProgressFromProvider(currentLng, currentLat);
 
         if (progress < 1) {
           smoothProviderAnimationFrame = requestAnimationFrame(step);
@@ -1546,6 +1557,7 @@
         smoothProviderPoint = target;
         smoothProviderBearing = target[2];
         setProviderMarker(target[0], target[1], target[2]);
+        updateRouteProgressFromProvider(target[0], target[1], true);
       };
 
       smoothProviderAnimationFrame = requestAnimationFrame(step);
@@ -1560,6 +1572,114 @@
 
       lastProviderCameraAt = now;
       cameraToProvider(lng, lat, bearing);
+    }
+
+
+
+    function projectRouteProgressPoint(px, py, ax, ay, bx, by) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+
+      if (len2 <= 0) {
+        return { x: ax, y: ay, t: 0 };
+      }
+
+      const rawT = ((px - ax) * dx + (py - ay) * dy) / len2;
+      const t = Math.max(0, Math.min(1, rawT));
+
+      return {
+        x: ax + dx * t,
+        y: ay + dy * t,
+        t,
+      };
+    }
+
+    function remainingRouteFromProvider(lng, lat) {
+      if (!map || !Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return null;
+      }
+
+      const providerScreen = map.project([lng, lat]);
+      let best = null;
+
+      for (let i = 0; i < fullRouteLinePoints.length - 1; i += 1) {
+        const aCoord = fullRouteLinePoints[i];
+        const bCoord = fullRouteLinePoints[i + 1];
+
+        if (!aCoord || !bCoord) continue;
+
+        const a = map.project(aCoord);
+        const b = map.project(bCoord);
+
+        const projected = projectRouteProgressPoint(
+          providerScreen.x,
+          providerScreen.y,
+          a.x,
+          a.y,
+          b.x,
+          b.y,
+        );
+
+        const dx = providerScreen.x - projected.x;
+        const dy = providerScreen.y - projected.y;
+        const dist2 = dx * dx + dy * dy;
+
+        if (!best || dist2 < best.dist2) {
+          const lngLat = map.unproject([projected.x, projected.y]);
+
+          best = {
+            index: i,
+            dist2,
+            point: [lngLat.lng, lngLat.lat],
+          };
+        }
+      }
+
+      if (!best) return null;
+
+      const safeIndex = Math.max(routeProgressLastIndex, best.index);
+      routeProgressLastIndex = safeIndex;
+
+      const startPoint =
+        best.index >= safeIndex
+          ? best.point
+          : fullRouteLinePoints[safeIndex];
+
+      const remaining = [
+        startPoint,
+        ...fullRouteLinePoints.slice(safeIndex + 1),
+      ].filter(Boolean);
+
+      if (remaining.length >= 2) {
+        return remaining;
+      }
+
+      const destination = fullRouteLinePoints[fullRouteLinePoints.length - 1];
+
+      if (destination) {
+        return [startPoint, destination].filter(Boolean);
+      }
+
+      return null;
+    }
+
+    function updateRouteProgressFromProvider(lng, lat, force = false) {
+      const now = Date.now();
+
+      if (!force && now - routeProgressLastUpdateAt < ROUTE_PROGRESS_UPDATE_INTERVAL_MS) {
+        return;
+      }
+
+      routeProgressLastUpdateAt = now;
+
+      const source = map && map.getSource ? map.getSource("route") : null;
+      if (!source || typeof source.setData !== "function") return;
+
+      const remaining = remainingRouteFromProvider(lng, lat);
+      if (!remaining || remaining.length < 2) return;
+
+      source.setData(routeGeoJson(remaining));
     }
 
 
@@ -1580,6 +1700,8 @@
 
       const snapped = nearestRoutePoint(lng, lat);
       lastProviderPoint = snapped;
+
+      updateRouteProgressFromProvider(snapped[0], snapped[1], true);
 
       animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
