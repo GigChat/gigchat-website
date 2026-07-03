@@ -703,6 +703,17 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Smooth Provider Navigation v16
+    let smoothProviderPoint = null;
+    let smoothProviderBearing = 0;
+    let smoothProviderAnimationFrame = 0;
+    let lastProviderCameraAt = 0;
+
+    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 650;
+    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 1800;
+    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 900;
+    const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 200;
+
 
     function getToken() {
       const url = new URL(window.location.href);
@@ -1409,15 +1420,169 @@
       });
     }
 
-    function updateProviderCamera(rawLat, rawLng) {
-      const snapped = nearestRoutePoint(rawLng, rawLat);
+
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, value));
+    }
+
+    function easeSmoothProvider(t) {
+      const x = clamp01(t);
+      return x < 0.5
+        ? 4 * x * x * x
+        : 1 - Math.pow(-2 * x + 2, 3) / 2;
+    }
+
+    function lerpNumber(from, to, t) {
+      return from + (to - from) * t;
+    }
+
+    function normalizeProviderBearing(value) {
+      if (!Number.isFinite(value)) return 0;
+      return ((value % 360) + 360) % 360;
+    }
+
+    function lerpBearing(from, to, t) {
+      const a = normalizeProviderBearing(from);
+      const b = normalizeProviderBearing(to);
+      let delta = b - a;
+
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+
+      return normalizeProviderBearing(a + delta * t);
+    }
+
+    function distanceMetersBetweenLngLat(a, b) {
+      if (!a || !b) return 0;
+
+      const earthRadiusMeters = 6371000;
+      const lng1 = Number(a[0]);
+      const lat1 = Number(a[1]);
+      const lng2 = Number(b[0]);
+      const lat2 = Number(b[1]);
+
+      if (
+        !Number.isFinite(lng1) ||
+        !Number.isFinite(lat1) ||
+        !Number.isFinite(lng2) ||
+        !Number.isFinite(lat2)
+      ) {
+        return 0;
+      }
+
+      const toRad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * toRad;
+      const dLng = (lng2 - lng1) * toRad;
+      const rLat1 = lat1 * toRad;
+      const rLat2 = lat2 * toRad;
+
+      const h =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(rLat1) *
+          Math.cos(rLat2) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2);
+
+      return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    function animateProviderMarkerTo(lng, lat, bearing) {
+      const target = [
+        Number(lng),
+        Number(lat),
+        normalizeProviderBearing(Number(bearing)),
+      ];
+
+      if (!Number.isFinite(target[0]) || !Number.isFinite(target[1])) return;
+
+      if (!smoothProviderPoint) {
+        smoothProviderPoint = target;
+        smoothProviderBearing = target[2];
+        setProviderMarker(target[0], target[1], smoothProviderBearing);
+        return;
+      }
+
+      if (smoothProviderAnimationFrame) {
+        cancelAnimationFrame(smoothProviderAnimationFrame);
+        smoothProviderAnimationFrame = 0;
+      }
+
+      const from = [
+        Number(smoothProviderPoint[0]),
+        Number(smoothProviderPoint[1]),
+        normalizeProviderBearing(Number(smoothProviderBearing)),
+      ];
+
+      const moveDistanceMeters = distanceMetersBetweenLngLat(from, target);
+      const durationMs = Math.max(
+        SMOOTH_PROVIDER_MIN_ANIMATION_MS,
+        Math.min(
+          SMOOTH_PROVIDER_MAX_ANIMATION_MS,
+          SMOOTH_PROVIDER_MIN_ANIMATION_MS + moveDistanceMeters * 18,
+        ),
+      );
+
+      const startedAt = performance.now();
+
+      const step = (now) => {
+        const progress = clamp01((now - startedAt) / durationMs);
+        const eased = easeSmoothProvider(progress);
+
+        const currentLng = lerpNumber(from[0], target[0], eased);
+        const currentLat = lerpNumber(from[1], target[1], eased);
+        const currentBearing = lerpBearing(from[2], target[2], eased);
+
+        smoothProviderPoint = [currentLng, currentLat, currentBearing];
+        smoothProviderBearing = currentBearing;
+
+        setProviderMarker(currentLng, currentLat, currentBearing);
+
+        if (progress < 1) {
+          smoothProviderAnimationFrame = requestAnimationFrame(step);
+          return;
+        }
+
+        smoothProviderAnimationFrame = 0;
+        smoothProviderPoint = target;
+        smoothProviderBearing = target[2];
+        setProviderMarker(target[0], target[1], target[2]);
+      };
+
+      smoothProviderAnimationFrame = requestAnimationFrame(step);
+    }
+
+    function smoothCameraToProvider(lng, lat, bearing) {
+      const now = Date.now();
+
+      if (now - lastProviderCameraAt < SMOOTH_PROVIDER_CAMERA_INTERVAL_MS) {
+        return;
+      }
+
+      lastProviderCameraAt = now;
+      cameraToProvider(lng, lat, bearing);
+    }
+
+
+    function updateProviderCamera(rawLat, rawLng, accuracy = null) {
+      const lat = Number(rawLat);
+      const lng = Number(rawLng);
+      const gpsAccuracy = Number(accuracy);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      if (
+        smoothProviderPoint &&
+        Number.isFinite(gpsAccuracy) &&
+        gpsAccuracy > SMOOTH_PROVIDER_MAX_ACCURACY_METERS
+      ) {
+        return;
+      }
+
+      const snapped = nearestRoutePoint(lng, lat);
       lastProviderPoint = snapped;
 
-      setProviderMarker(snapped[0], snapped[1], snapped[2]);
-
-      if (followProvider) {
-        cameraToProvider(snapped[0], snapped[1], snapped[2]);
-      }
+      animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
+      smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
     }
 
     async function sendProviderLocationPing(position) {
@@ -1452,7 +1617,7 @@
         throw new Error("Invalid provider location.");
       }
 
-      updateProviderCamera(coords.latitude, coords.longitude);
+      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
 
       const now = Date.now();
       const shouldPing = forcePing || now - lastPingAt >= 30000;
@@ -1466,7 +1631,7 @@
       updateEtaUI(eta);
 
       const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
-      updateProviderCamera(coords.latitude, coords.longitude);
+      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
 
       if (routeLoaded && eta && eta.customer_notified) {
         setStatus("Route loaded. Customer notified.");
