@@ -703,7 +703,16 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
-// Provider Fast Bearing v23
+    // Provider Arrow Stable v27
+    const PROVIDER_ARROW_VISUAL_OFFSET_DEGREES = 0;
+
+    // Provider Arrow Bearing v26
+    const PROVIDER_ARROW_VISUAL_OFFSET_DEGREES = 0;
+
+    // Provider Arrow Lock v25
+    const PROVIDER_ARROW_SCREEN_LOCKED = false;
+
+    // Provider Fast Bearing v23
     let lastLiveHeading = null;
     let lastLiveHeadingAt = 0;
 
@@ -2186,7 +2195,8 @@
       }
 
       if (providerMarker && typeof providerMarker.setRotation === "function") {
-        providerMarker.setRotation(Number.isFinite(Number(bearing)) ? Number(bearing) : 0);
+        const routeBearing = Number.isFinite(Number(bearing)) ? Number(bearing) : 0;
+        providerMarker.setRotation(normalizeProviderBearing(routeBearing));
       }
     }
 
