@@ -703,6 +703,11 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Service Area Circle v22
+    let serviceAreaLngLat = null;
+
+    const SERVICE_AREA_RADIUS_METERS = 60;
+
     // GPS Navigation Meter v21
     let navigationRouteSteps = [];
     let navigationRouteStepsSignature = "";
@@ -1304,6 +1309,33 @@
             "line-color": "#ff405f",
             "line-width": 9,
             "line-opacity": 0.95,
+          },
+        });
+
+
+        map.addSource("service-area", {
+          type: "geojson",
+          data: serviceAreaCircleGeoJson(-79.53012, 8.9785),
+        });
+
+        map.addLayer({
+          id: "service-area-fill",
+          type: "fill",
+          source: "service-area",
+          paint: {
+            "fill-color": "#ff4f73",
+            "fill-opacity": 0.16,
+          },
+        });
+
+        map.addLayer({
+          id: "service-area-outline",
+          type: "line",
+          source: "service-area",
+          paint: {
+            "line-color": "#ff6f8d",
+            "line-width": 2,
+            "line-opacity": 0.85,
           },
         });
 
@@ -1961,6 +1993,104 @@
       ];
     }
 
+
+    function servicePointGeoJson(lng, lat) {
+      return {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [Number(lng), Number(lat)],
+            },
+            properties: {},
+          },
+        ],
+      };
+    }
+
+    function serviceAreaCircleGeoJson(lng, lat, radiusMeters = SERVICE_AREA_RADIUS_METERS) {
+      const centerLng = Number(lng);
+      const centerLat = Number(lat);
+      const radius = Number(radiusMeters);
+
+      if (
+        !Number.isFinite(centerLng) ||
+        !Number.isFinite(centerLat) ||
+        !Number.isFinite(radius)
+      ) {
+        return {
+          type: "FeatureCollection",
+          features: [],
+        };
+      }
+
+      const points = [];
+      const earthRadiusMeters = 6371000;
+      const latRad = centerLat * Math.PI / 180;
+      const lngRad = centerLng * Math.PI / 180;
+      const angularDistance = radius / earthRadiusMeters;
+
+      for (let i = 0; i <= 96; i += 1) {
+        const bearing = (i / 96) * Math.PI * 2;
+
+        const pointLatRad = Math.asin(
+          Math.sin(latRad) * Math.cos(angularDistance) +
+            Math.cos(latRad) * Math.sin(angularDistance) * Math.cos(bearing),
+        );
+
+        const pointLngRad =
+          lngRad +
+          Math.atan2(
+            Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRad),
+            Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(pointLatRad),
+          );
+
+        points.push([
+          pointLngRad * 180 / Math.PI,
+          pointLatRad * 180 / Math.PI,
+        ]);
+      }
+
+      return {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [points],
+            },
+            properties: {},
+          },
+        ],
+      };
+    }
+
+    function updateServiceAreaCircle(lng, lat) {
+      const serviceLng = Number(lng);
+      const serviceLat = Number(lat);
+
+      if (!Number.isFinite(serviceLng) || !Number.isFinite(serviceLat)) return;
+
+      serviceAreaLngLat = [serviceLng, serviceLat];
+
+      if (!map || !map.getSource) return;
+
+      const areaSource = map.getSource("service-area");
+      const destinationSource = map.getSource("destination");
+
+      if (areaSource && typeof areaSource.setData === "function") {
+        areaSource.setData(serviceAreaCircleGeoJson(serviceLng, serviceLat));
+      }
+
+      if (destinationSource && typeof destinationSource.setData === "function") {
+        destinationSource.setData(servicePointGeoJson(serviceLng, serviceLat));
+      }
+    }
+
+
     function drawEncodedRoute(encoded) {
       const points = decodeGooglePolyline(encoded);
       if (points.length < 2 || !map || !map.getSource("route")) return false;
@@ -2521,6 +2651,8 @@
 
       exactLat = Number(job.service_latitude);
       exactLng = Number(job.service_longitude);
+
+      updateServiceAreaCircle(exactLng, exactLat);
 
       if (!Number.isFinite(exactLat) || !Number.isFinite(exactLng)) {
         throw new Error("This job does not have map coordinates yet.");
