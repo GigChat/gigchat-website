@@ -703,13 +703,6 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
-    // Provider Fast Bearing v23
-    let lastLiveHeading = null;
-    let lastLiveHeadingAt = 0;
-
-    const PROVIDER_HEADING_MAX_AGE_MS = 2500;
-    const PROVIDER_HEADING_MIN_SPEED_MPH = 4;
-
     // Service Area Circle v22
     let serviceAreaLngLat = null;
 
@@ -754,9 +747,9 @@
     let smoothProviderAnimationFrame = 0;
     let lastProviderCameraAt = 0;
 
-    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 120;
-    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 420;
-    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 280;
+    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 220;
+    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 850;
+    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 450;
     const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 150;
 
 
@@ -1577,17 +1570,13 @@
 
     function providerAnimationDurationMs(moveDistanceMeters) {
       const distance = Number(moveDistanceMeters) || 0;
-      const speed = Number(smoothedSpeedMph) || 0;
 
-      if (distance >= NAVIGATION_HARD_CATCHUP_METERS) return 90;
-      if (speed >= 35) return 120;
-      if (speed >= 25) return 160;
-      if (speed >= 15) return 220;
-      if (distance >= 45) return 180;
-      if (distance >= 22) return 220;
-      if (distance >= 8) return 280;
+      if (distance >= NAVIGATION_HARD_CATCHUP_METERS) return 180;
+      if (distance >= 45) return 260;
+      if (distance >= 22) return 360;
+      if (distance >= 8) return 480;
 
-      return 320;
+      return 560;
     }
 
 
@@ -1963,57 +1952,6 @@
     }
 
 
-
-    function updateLiveHeadingFromCoords(coords) {
-      if (!coords) return;
-
-      const rawHeading = Number(coords.heading);
-      const rawSpeed = Number(coords.speed);
-      const speedMph = Number.isFinite(rawSpeed) && rawSpeed >= 0
-        ? rawSpeed * METERS_PER_SECOND_TO_MPH
-        : smoothedSpeedMph;
-
-      if (
-        Number.isFinite(rawHeading) &&
-        rawHeading >= 0 &&
-        Number.isFinite(speedMph) &&
-        speedMph >= PROVIDER_HEADING_MIN_SPEED_MPH
-      ) {
-        lastLiveHeading = normalizeProviderBearing(rawHeading);
-        lastLiveHeadingAt = Date.now();
-      }
-    }
-
-    function getFreshLiveHeading() {
-      if (!Number.isFinite(Number(lastLiveHeading))) return null;
-
-      if (Date.now() - lastLiveHeadingAt > PROVIDER_HEADING_MAX_AGE_MS) {
-        return null;
-      }
-
-      return normalizeProviderBearing(Number(lastLiveHeading));
-    }
-
-    function chooseProviderBearing(routeBearing) {
-      const liveHeading = getFreshLiveHeading();
-
-      if (liveHeading === null) {
-        return normalizeProviderBearing(routeBearing);
-      }
-
-      const route = normalizeProviderBearing(routeBearing);
-      const diff = bearingDifferenceDegrees(liveHeading, route);
-
-      // If live heading is close to the route, use it for faster response.
-      // If it is very different, trust the route so the arrow does not point into wrong streets.
-      if (diff <= 55) {
-        return lerpBearing(route, liveHeading, 0.72);
-      }
-
-      return route;
-    }
-
-
     function nearestRoutePoint(lng, lat) {
       const stepSnap = findStepAwareRouteSnap(lng, lat);
 
@@ -2025,7 +1963,7 @@
         return [
           stepSnap.point[0],
           stepSnap.point[1],
-          chooseProviderBearing(stepSnap.bearing),
+          stepSnap.bearing,
           routeProgressLastIndex || 0,
           stepSnap.distancePixelsSquared,
         ];
@@ -2040,7 +1978,7 @@
         return [
           snap.point[0],
           snap.point[1],
-          chooseProviderBearing(snap.bearing),
+          snap.bearing,
           nextIndex,
           snap.distancePixelsSquared,
         ];
@@ -2049,7 +1987,7 @@
       return [
         Number(lng),
         Number(lat),
-        chooseProviderBearing(smoothProviderBearing || 0),
+        smoothProviderBearing || 0,
         routeProgressLastIndex || 0,
         null,
       ];
@@ -2598,7 +2536,6 @@
       }
 
       updateProviderSpeedDebug(coords);
-          updateLiveHeadingFromCoords(coords);
           updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
 
       const now = Date.now();
@@ -2614,7 +2551,6 @@
 
       const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
       updateProviderSpeedDebug(coords);
-          updateLiveHeadingFromCoords(coords);
           updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
 
       if (routeLoaded && eta && eta.customer_notified) {
