@@ -703,11 +703,8 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
-    // Provider Arrow Stable v27
-    const PROVIDER_ARROW_VISUAL_OFFSET_DEGREES = 0;
-
     // Provider Arrow Bearing v26
-    const PROVIDER_ARROW_VISUAL_OFFSET_DEGREES = 0;
+    const PROVIDER_ARROW_VISUAL_OFFSET_DEGREES = -90;
 
     // Provider Arrow Lock v25
     const PROVIDER_ARROW_SCREEN_LOCKED = false;
@@ -2196,7 +2193,11 @@
 
       if (providerMarker && typeof providerMarker.setRotation === "function") {
         const routeBearing = Number.isFinite(Number(bearing)) ? Number(bearing) : 0;
-        providerMarker.setRotation(normalizeProviderBearing(routeBearing));
+        const displayBearing = normalizeProviderBearing(
+          routeBearing + PROVIDER_ARROW_VISUAL_OFFSET_DEGREES,
+        );
+
+        providerMarker.setRotation(displayBearing);
       }
     }
 
