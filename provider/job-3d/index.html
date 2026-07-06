@@ -754,9 +754,9 @@
     let smoothProviderAnimationFrame = 0;
     let lastProviderCameraAt = 0;
 
-    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 70;
-    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 280;
-    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 180;
+    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 120;
+    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 420;
+    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 280;
     const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 150;
 
 
@@ -1579,15 +1579,15 @@
       const distance = Number(moveDistanceMeters) || 0;
       const speed = Number(smoothedSpeedMph) || 0;
 
-      if (distance >= NAVIGATION_HARD_CATCHUP_METERS) return 70;
-      if (speed >= 35) return 90;
-      if (speed >= 25) return 110;
-      if (speed >= 15) return 140;
-      if (distance >= 45) return 120;
-      if (distance >= 22) return 150;
-      if (distance >= 8) return 180;
+      if (distance >= NAVIGATION_HARD_CATCHUP_METERS) return 90;
+      if (speed >= 35) return 120;
+      if (speed >= 25) return 160;
+      if (speed >= 15) return 220;
+      if (distance >= 45) return 180;
+      if (distance >= 22) return 220;
+      if (distance >= 8) return 280;
 
-      return 220;
+      return 320;
     }
 
 
@@ -2304,7 +2304,6 @@
       ];
 
       const moveDistanceMeters = distanceMetersBetweenLngLat(from, target);
-      const bearingDelta = bearingDifferenceDegrees(from[2], target[2]);
 
       if (moveDistanceMeters >= 140) {
         smoothProviderPoint = target;
@@ -2323,23 +2322,15 @@
         ),
       );
 
-      // Rotation must react faster than position.
-      const bearingDurationMs = bearingDelta >= 18
-        ? Math.min(120, durationMs * 0.35)
-        : Math.min(180, durationMs * 0.55);
-
       const startedAt = performance.now();
 
       const step = (now) => {
-        const positionProgress = clamp01((now - startedAt) / durationMs);
-        const bearingProgress = clamp01((now - startedAt) / bearingDurationMs);
+        const progress = clamp01((now - startedAt) / durationMs);
+        const eased = easeSmoothProvider(progress);
 
-        const easedPosition = easeSmoothProvider(positionProgress);
-        const easedBearing = easeSmoothProvider(bearingProgress);
-
-        const currentLng = lerpNumber(from[0], target[0], easedPosition);
-        const currentLat = lerpNumber(from[1], target[1], easedPosition);
-        const currentBearing = lerpBearing(from[2], target[2], easedBearing);
+        const currentLng = lerpNumber(from[0], target[0], eased);
+        const currentLat = lerpNumber(from[1], target[1], eased);
+        const currentBearing = lerpBearing(from[2], target[2], eased);
 
         smoothProviderPoint = [currentLng, currentLat, currentBearing];
         smoothProviderBearing = currentBearing;
@@ -2348,7 +2339,7 @@
         updateGpsNavigationMeter(currentLng, currentLat, currentBearing);
         updateRouteProgressFromProvider(currentLng, currentLat);
 
-        if (positionProgress < 1 || bearingProgress < 1) {
+        if (progress < 1) {
           smoothProviderAnimationFrame = requestAnimationFrame(step);
           return;
         }
@@ -2477,46 +2468,6 @@
       document.body.appendChild(chip);
       return chip;
     }
-
-    // Speed Chip Always Visible v24
-    function showProviderSpeedChipNow() {
-      if (typeof ensureProviderSpeedChip !== "function") return;
-
-      const chip = ensureProviderSpeedChip();
-
-      if (!chip) return;
-
-      chip.style.display = "block";
-      chip.style.top = "210px";
-      chip.style.right = "24px";
-      chip.style.zIndex = "18";
-
-      const valueEl = document.getElementById("providerSpeedValue");
-      const accuracyEl = document.getElementById("providerSpeedAccuracy");
-
-      if (valueEl && !String(valueEl.textContent || "").trim()) {
-        valueEl.textContent = "-- mph";
-      }
-
-      if (accuracyEl && !String(accuracyEl.textContent || "").trim()) {
-        accuracyEl.textContent = "GPS --";
-      }
-    }
-
-    setTimeout(showProviderSpeedChipNow, 250);
-    setTimeout(showProviderSpeedChipNow, 900);
-
-    window.addEventListener("load", () => {
-      setTimeout(showProviderSpeedChipNow, 250);
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        setTimeout(showProviderSpeedChipNow, 250);
-      }
-    });
-
-
 
     function updateProviderSpeedDebug(coords) {
       if (!coords) return;
@@ -2766,7 +2717,6 @@
       exactLng = Number(job.service_longitude);
 
       updateServiceAreaCircle(exactLng, exactLat);
-      showProviderSpeedChipNow();
 
       if (!Number.isFinite(exactLat) || !Number.isFinite(exactLng)) {
         throw new Error("This job does not have map coordinates yet.");
