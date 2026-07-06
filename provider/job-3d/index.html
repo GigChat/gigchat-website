@@ -703,6 +703,9 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Initial Camera Align v30
+    let initialCameraAligned = false;
+
     // Provider Fast Bearing v23
     let lastLiveHeading = null;
     let lastLiveHeadingAt = 0;
@@ -2575,6 +2578,33 @@
     }
 
 
+
+    function alignInitialCameraToProvider(lng, lat, bearing) {
+      if (initialCameraAligned) return;
+      if (!map || !map.jumpTo) return;
+
+      const center = [Number(lng), Number(lat)];
+      const routeBearing = Number(bearing);
+
+      if (
+        !Number.isFinite(center[0]) ||
+        !Number.isFinite(center[1]) ||
+        !Number.isFinite(routeBearing)
+      ) {
+        return;
+      }
+
+      initialCameraAligned = true;
+
+      map.jumpTo({
+        center,
+        bearing: routeBearing,
+        pitch: 62,
+        zoom: Math.max(map.getZoom ? map.getZoom() : 18, 18),
+      });
+    }
+
+
     function updateProviderCamera(rawLat, rawLng, accuracy = null) {
       const lat = Number(rawLat);
       const lng = Number(rawLng);
@@ -2610,6 +2640,7 @@
 
       updateGpsNavigationMeter(snapped[0], snapped[1], snapped[2]);
       updateRouteProgressFromProvider(snapped[0], snapped[1], true);
+      alignInitialCameraToProvider(snapped[0], snapped[1], snapped[2]);
       animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
     }
