@@ -703,9 +703,6 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
-    // Provider Arrow Lock v25
-    const PROVIDER_ARROW_SCREEN_LOCKED = true;
-
     // Provider Fast Bearing v23
     let lastLiveHeading = null;
     let lastLiveHeadingAt = 0;
@@ -2189,13 +2186,7 @@
       }
 
       if (providerMarker && typeof providerMarker.setRotation === "function") {
-        const displayBearing = PROVIDER_ARROW_SCREEN_LOCKED
-          ? 0
-          : Number.isFinite(bearing)
-            ? bearing
-            : 0;
-
-        providerMarker.setRotation(displayBearing);
+        providerMarker.setRotation(Number.isFinite(bearing) ? bearing : 0);
       }
     }
 
