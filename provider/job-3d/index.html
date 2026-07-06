@@ -703,6 +703,16 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // GPS Navigation Meter v21
+    let navigationRouteSteps = [];
+    let navigationRouteStepsSignature = "";
+    let navigationCurrentStepIndex = 0;
+    let navigationLastTurnNowAt = 0;
+
+    const NAVIGATION_STEP_LOOKAHEAD_COUNT = 3;
+    const NAVIGATION_TURN_NOW_METERS = 12;
+    const NAVIGATION_SWITCH_STEP_METERS = 8;
+
     // Provider Speed Debug v19
     let lastSpeedDebugPoint = null;
     let lastSpeedDebugAt = 0;
@@ -1053,6 +1063,7 @@
 
 
     function updateEtaUI(data) {
+      setNavigationRouteStepsFromEta(data);
       const minutes = data && data.eta_minutes ? Number(data.eta_minutes) : null;
       const distance = data && data.eta_distance_meters ? Number(data.eta_distance_meters) : null;
 
@@ -1537,7 +1548,395 @@
     }
 
 
+
+    function decodeNavigationPolyline(encoded) {
+      const value = String(encoded || "");
+      const points = [];
+
+      let index = 0;
+      let lat = 0;
+      let lng = 0;
+
+      while (index < value.length) {
+        let result = 0;
+        let shift = 0;
+        let byte = null;
+
+        do {
+          byte = value.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20 && index < value.length);
+
+        const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lat += deltaLat;
+
+        result = 0;
+        shift = 0;
+
+        do {
+          byte = value.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20 && index < value.length);
+
+        const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lng += deltaLng;
+
+        points.push([lng / 1e5, lat / 1e5]);
+      }
+
+      return points;
+    }
+
+    function normalizeNavigationRouteSteps(rawSteps) {
+      const steps = Array.isArray(rawSteps) ? rawSteps : [];
+
+      return steps
+        .map((step) => {
+          const instruction = String(
+            step.instruction ||
+              step.instructions ||
+              step.next_instruction ||
+              "",
+          ).trim();
+
+          const maneuver = String(step.maneuver || "").trim();
+
+          const encoded =
+            step.encodedPolyline ||
+            step.encoded_polyline ||
+            step.polyline ||
+            "";
+
+          const points = encoded ? decodeNavigationPolyline(encoded) : [];
+
+          const distanceMeters = Number(
+            step.distanceMeters ??
+              step.distance_meters ??
+              step.distance ??
+              0,
+          );
+
+          return {
+            instruction,
+            maneuver,
+            points,
+            distanceMeters: Number.isFinite(distanceMeters) ? distanceMeters : 0,
+          };
+        })
+        .filter((step) => step.instruction || step.points.length >= 2);
+    }
+
+    function routeStepsSignatureFromEta(data) {
+      const rawSteps =
+        data && Array.isArray(data.route_steps)
+          ? data.route_steps
+          : data && Array.isArray(data.routeSteps)
+            ? data.routeSteps
+            : [];
+
+      return rawSteps
+        .map((step) => {
+          return [
+            step.instruction || step.instructions || "",
+            step.maneuver || "",
+            step.encodedPolyline || step.encoded_polyline || step.polyline || "",
+            step.distanceMeters || step.distance_meters || "",
+          ].join(":");
+        })
+        .join("|");
+    }
+
+    function setNavigationRouteStepsFromEta(data) {
+      if (!data) return;
+
+      const rawSteps =
+        Array.isArray(data.route_steps)
+          ? data.route_steps
+          : Array.isArray(data.routeSteps)
+            ? data.routeSteps
+            : [];
+
+      if (!rawSteps.length) return;
+
+      const signature = routeStepsSignatureFromEta(data);
+
+      if (signature && signature === navigationRouteStepsSignature) {
+        return;
+      }
+
+      const normalized = normalizeNavigationRouteSteps(rawSteps);
+
+      if (!normalized.length) return;
+
+      navigationRouteSteps = normalized;
+      navigationRouteStepsSignature = signature;
+      navigationCurrentStepIndex = 0;
+      navigationLastTurnNowAt = 0;
+    }
+
+    function polylineDistanceMeters(points, startIndex = 0) {
+      if (!Array.isArray(points) || points.length < 2) return 0;
+
+      let total = 0;
+
+      for (let i = Math.max(0, startIndex); i < points.length - 1; i += 1) {
+        total += distanceMetersBetweenLngLat(points[i], points[i + 1]);
+      }
+
+      return total;
+    }
+
+    function closestPointOnNavigationPolyline(points, lng, lat) {
+      if (!map || !Array.isArray(points) || points.length < 2) {
+        return null;
+      }
+
+      const providerScreen = map.project([lng, lat]);
+      let best = null;
+
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const aCoord = points[i];
+        const bCoord = points[i + 1];
+
+        if (!aCoord || !bCoord) continue;
+
+        const a = map.project(aCoord);
+        const b = map.project(bCoord);
+
+        const projected = projectPointToRouteSegment(
+          providerScreen.x,
+          providerScreen.y,
+          a.x,
+          a.y,
+          b.x,
+          b.y,
+        );
+
+        const dx = providerScreen.x - projected.x;
+        const dy = providerScreen.y - projected.y;
+        const dist2 = dx * dx + dy * dy;
+        const lngLat = map.unproject([projected.x, projected.y]);
+        const point = [lngLat.lng, lngLat.lat];
+
+        if (!best || dist2 < best.dist2) {
+          best = {
+            point,
+            segmentIndex: i,
+            t: projected.t,
+            dist2,
+          };
+        }
+      }
+
+      return best;
+    }
+
+    function remainingMetersOnStep(step, snap) {
+      if (!step || !snap || !Array.isArray(step.points) || step.points.length < 2) {
+        return null;
+      }
+
+      const points = step.points;
+      const segmentIndex = Math.max(
+        0,
+        Math.min(Number(snap.segmentIndex) || 0, points.length - 2),
+      );
+
+      const segmentEnd = points[segmentIndex + 1];
+      let remaining = distanceMetersBetweenLngLat(snap.point, segmentEnd);
+
+      for (let i = segmentIndex + 1; i < points.length - 1; i += 1) {
+        remaining += distanceMetersBetweenLngLat(points[i], points[i + 1]);
+      }
+
+      return remaining;
+    }
+
+    function formatDynamicNavigationDistance(meters) {
+      const value = Number(meters);
+
+      if (!Number.isFinite(value)) return "";
+
+      if (value <= NAVIGATION_TURN_NOW_METERS) {
+        return "Now";
+      }
+
+      if (value < 50) {
+        return `${Math.max(5, Math.round(value / 5) * 5)} m`;
+      }
+
+      if (value < 1000) {
+        return `${Math.max(10, Math.round(value / 10) * 10)} m`;
+      }
+
+      const miles = value / 1609.344;
+
+      if (miles < 10) {
+        return `${miles.toFixed(1)} mi`;
+      }
+
+      return `${Math.round(miles)} mi`;
+    }
+
+    function findStepAwareRouteSnap(lng, lat) {
+      if (!navigationRouteSteps.length) return null;
+
+      const startStep = Math.max(0, navigationCurrentStepIndex);
+      const endStep = Math.min(
+        navigationRouteSteps.length - 1,
+        startStep + NAVIGATION_STEP_LOOKAHEAD_COUNT,
+      );
+
+      let best = null;
+
+      for (let stepIndex = startStep; stepIndex <= endStep; stepIndex += 1) {
+        const step = navigationRouteSteps[stepIndex];
+
+        if (!step || !Array.isArray(step.points) || step.points.length < 2) {
+          continue;
+        }
+
+        const snap = closestPointOnNavigationPolyline(step.points, lng, lat);
+
+        if (!snap) continue;
+
+        const remainingMeters = remainingMetersOnStep(step, snap);
+        const routeBearing = bearingBetweenLngLat(
+          snap.point,
+          step.points[Math.min(snap.segmentIndex + 1, step.points.length - 1)],
+        );
+
+        const stepPenalty = Math.max(0, stepIndex - navigationCurrentStepIndex) * 450;
+        const score = snap.dist2 + stepPenalty;
+
+        if (!best || score < best.score) {
+          best = {
+            stepIndex,
+            step,
+            snap,
+            point: snap.point,
+            bearing: routeBearing,
+            remainingMeters,
+            score,
+            distancePixelsSquared: snap.dist2,
+          };
+        }
+      }
+
+      return best;
+    }
+
+    function updateGpsNavigationBanner(stepIndex, remainingMeters) {
+      if (!navigationRouteSteps.length) return;
+
+      const step = navigationRouteSteps[stepIndex];
+
+      if (!step) return;
+
+      const distanceEl = document.getElementById("gpsDistance");
+      const instructionEl = document.getElementById("gpsInstruction");
+      const subEl = document.getElementById("gpsSub");
+
+      const instruction = String(step.instruction || "").trim();
+      const clean =
+        typeof cleanGpsInstruction === "function"
+          ? cleanGpsInstruction(instruction)
+          : instruction;
+
+      let street = clean;
+      let action = "";
+
+      if (typeof splitGpsInstruction === "function") {
+        const split = splitGpsInstruction(instruction);
+        street = split.street || clean;
+        action = split.action || "";
+      } else if (typeof shortActionFromInstruction === "function") {
+        action = shortActionFromInstruction(clean);
+      }
+
+      const isTurnNow =
+        Number.isFinite(Number(remainingMeters)) &&
+        Number(remainingMeters) <= NAVIGATION_TURN_NOW_METERS;
+
+      if (distanceEl) {
+        distanceEl.textContent = formatDynamicNavigationDistance(remainingMeters);
+      }
+
+      if (instructionEl) {
+        instructionEl.textContent = street || "Continue";
+      }
+
+      if (subEl) {
+        subEl.textContent = isTurnNow ? "Turn now" : action || "Continue";
+      }
+    }
+
+    function updateGpsNavigationMeter(lng, lat, bearing = null) {
+      const best = findStepAwareRouteSnap(lng, lat);
+
+      if (!best) return null;
+
+      if (best.stepIndex > navigationCurrentStepIndex) {
+        navigationCurrentStepIndex = best.stepIndex;
+      }
+
+      let activeStepIndex = navigationCurrentStepIndex;
+      let remainingMeters = best.remainingMeters;
+
+      if (
+        Number.isFinite(Number(remainingMeters)) &&
+        Number(remainingMeters) <= NAVIGATION_SWITCH_STEP_METERS &&
+        activeStepIndex < navigationRouteSteps.length - 1
+      ) {
+        const now = Date.now();
+
+        if (now - navigationLastTurnNowAt > 900) {
+          navigationCurrentStepIndex = activeStepIndex + 1;
+          navigationLastTurnNowAt = now;
+
+          const nextBest = findStepAwareRouteSnap(lng, lat);
+
+          if (nextBest) {
+            activeStepIndex = nextBest.stepIndex;
+            remainingMeters = nextBest.remainingMeters;
+          } else {
+            activeStepIndex = navigationCurrentStepIndex;
+            const nextStep = navigationRouteSteps[activeStepIndex];
+            remainingMeters = nextStep ? nextStep.distanceMeters : null;
+          }
+        }
+      }
+
+      updateGpsNavigationBanner(activeStepIndex, remainingMeters);
+
+      return {
+        stepIndex: activeStepIndex,
+        remainingMeters,
+        bearing: best.bearing,
+        point: best.point,
+      };
+    }
+
+
     function nearestRoutePoint(lng, lat) {
+      const stepSnap = findStepAwareRouteSnap(lng, lat);
+
+      if (stepSnap) {
+        if (stepSnap.stepIndex > navigationCurrentStepIndex) {
+          navigationCurrentStepIndex = stepSnap.stepIndex;
+        }
+
+        return [
+          stepSnap.point[0],
+          stepSnap.point[1],
+          stepSnap.bearing,
+          routeProgressLastIndex || 0,
+          stepSnap.distancePixelsSquared,
+        ];
+      }
+
       const snap = findForwardRouteSnap(lng, lat);
 
       if (snap) {
@@ -1696,6 +2095,7 @@
         smoothProviderPoint = target;
         smoothProviderBearing = target[2];
         setProviderMarker(target[0], target[1], smoothProviderBearing);
+        updateGpsNavigationMeter(target[0], target[1], smoothProviderBearing);
         updateRouteProgressFromProvider(target[0], target[1], true);
         return;
       }
@@ -1717,6 +2117,7 @@
         smoothProviderPoint = target;
         smoothProviderBearing = target[2];
         setProviderMarker(target[0], target[1], target[2]);
+        updateGpsNavigationMeter(target[0], target[1], target[2]);
         updateRouteProgressFromProvider(target[0], target[1], true);
         return;
       }
@@ -1743,6 +2144,7 @@
         smoothProviderBearing = currentBearing;
 
         setProviderMarker(currentLng, currentLat, currentBearing);
+        updateGpsNavigationMeter(currentLng, currentLat, currentBearing);
         updateRouteProgressFromProvider(currentLng, currentLat);
 
         if (progress < 1) {
@@ -1754,6 +2156,7 @@
         smoothProviderPoint = target;
         smoothProviderBearing = target[2];
         setProviderMarker(target[0], target[1], target[2]);
+        updateGpsNavigationMeter(target[0], target[1], target[2]);
         updateRouteProgressFromProvider(target[0], target[1], true);
       };
 
@@ -1964,6 +2367,7 @@
       lastAcceptedGpsLngLat = rawPoint;
       lastAcceptedGpsAt = now;
 
+      updateGpsNavigationMeter(snapped[0], snapped[1], snapped[2]);
       updateRouteProgressFromProvider(snapped[0], snapped[1], true);
       animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
