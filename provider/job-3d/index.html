@@ -703,6 +703,13 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Provider Speed Debug v19
+    let lastSpeedDebugPoint = null;
+    let lastSpeedDebugAt = 0;
+    let smoothedSpeedMph = 0;
+
+    const METERS_PER_SECOND_TO_MPH = 2.2369362920544;
+
     // Navigation Tracking v18
     let lastAcceptedGpsLngLat = null;
     let lastAcceptedGpsAt = 0;
@@ -1839,6 +1846,91 @@
     }
 
 
+
+    function ensureProviderSpeedChip() {
+      let chip = document.getElementById("providerSpeedChip");
+
+      if (chip) return chip;
+
+      chip = document.createElement("div");
+      chip.id = "providerSpeedChip";
+      chip.style.position = "fixed";
+      chip.style.right = "14px";
+      chip.style.top = "92px";
+      chip.style.zIndex = "9999";
+      chip.style.padding = "10px 12px";
+      chip.style.borderRadius = "16px";
+      chip.style.background = "rgba(10, 12, 18, 0.82)";
+      chip.style.border = "1px solid rgba(255, 255, 255, 0.16)";
+      chip.style.backdropFilter = "blur(14px)";
+      chip.style.boxShadow = "0 10px 30px rgba(0, 0, 0, 0.35)";
+      chip.style.color = "#ffffff";
+      chip.style.fontFamily = "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+      chip.style.textAlign = "right";
+      chip.style.pointerEvents = "none";
+      chip.innerHTML = '<div style="font-size:11px;opacity:.65;letter-spacing:.04em;text-transform:uppercase;">Speed</div><div id="providerSpeedValue" style="font-size:22px;font-weight:800;line-height:1.05;">-- mph</div><div id="providerSpeedAccuracy" style="font-size:11px;opacity:.62;margin-top:3px;">GPS --</div>';
+
+      document.body.appendChild(chip);
+      return chip;
+    }
+
+    function updateProviderSpeedDebug(coords) {
+      if (!coords) return;
+
+      const chip = ensureProviderSpeedChip();
+      const valueEl = document.getElementById("providerSpeedValue");
+      const accuracyEl = document.getElementById("providerSpeedAccuracy");
+
+      const lat = Number(coords.latitude);
+      const lng = Number(coords.longitude);
+      const accuracy = Number(coords.accuracy);
+      const now = Date.now();
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      let speedMph = null;
+
+      if (Number.isFinite(Number(coords.speed)) && Number(coords.speed) >= 0) {
+        speedMph = Number(coords.speed) * METERS_PER_SECOND_TO_MPH;
+      }
+
+      const currentPoint = [lng, lat];
+
+      if (speedMph === null && lastSpeedDebugPoint && lastSpeedDebugAt) {
+        const seconds = Math.max(0.1, (now - lastSpeedDebugAt) / 1000);
+        const meters = distanceMetersBetweenLngLat(lastSpeedDebugPoint, currentPoint);
+
+        if (meters < 2.5) {
+          speedMph = 0;
+        } else {
+          speedMph = (meters / seconds) * METERS_PER_SECOND_TO_MPH;
+        }
+      }
+
+      lastSpeedDebugPoint = currentPoint;
+      lastSpeedDebugAt = now;
+
+      if (speedMph === null || !Number.isFinite(speedMph)) {
+        if (valueEl) valueEl.textContent = "-- mph";
+      } else {
+        const safeSpeed = Math.max(0, Math.min(120, speedMph));
+        smoothedSpeedMph = smoothedSpeedMph * 0.65 + safeSpeed * 0.35;
+
+        if (valueEl) valueEl.textContent = `${Math.round(smoothedSpeedMph)} mph`;
+      }
+
+      if (accuracyEl) {
+        accuracyEl.textContent = Number.isFinite(accuracy)
+          ? `GPS ±${Math.round(accuracy)} m`
+          : "GPS --";
+      }
+
+      if (chip) {
+        chip.style.display = "block";
+      }
+    }
+
+
     function updateProviderCamera(rawLat, rawLng, accuracy = null) {
       const lat = Number(rawLat);
       const lng = Number(rawLng);
@@ -1909,7 +2001,8 @@
         throw new Error("Invalid provider location.");
       }
 
-      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+      updateProviderSpeedDebug(coords);
+          updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
 
       const now = Date.now();
       const shouldPing = forcePing || now - lastPingAt >= 30000;
@@ -1923,7 +2016,8 @@
       updateEtaUI(eta);
 
       const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
-      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+      updateProviderSpeedDebug(coords);
+          updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
 
       if (routeLoaded && eta && eta.customer_notified) {
         setStatus("Route loaded. Customer notified.");
