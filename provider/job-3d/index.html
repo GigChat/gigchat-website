@@ -703,11 +703,8 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
-    // Provider Arrow Bearing v26
-    const PROVIDER_ARROW_VISUAL_OFFSET_DEGREES = -90;
-
     // Provider Arrow Lock v25
-    const PROVIDER_ARROW_SCREEN_LOCKED = false;
+    const PROVIDER_ARROW_SCREEN_LOCKED = true;
 
     // Provider Fast Bearing v23
     let lastLiveHeading = null;
@@ -2192,10 +2189,11 @@
       }
 
       if (providerMarker && typeof providerMarker.setRotation === "function") {
-        const routeBearing = Number.isFinite(Number(bearing)) ? Number(bearing) : 0;
-        const displayBearing = normalizeProviderBearing(
-          routeBearing + PROVIDER_ARROW_VISUAL_OFFSET_DEGREES,
-        );
+        const displayBearing = PROVIDER_ARROW_SCREEN_LOCKED
+          ? 0
+          : Number.isFinite(bearing)
+            ? bearing
+            : 0;
 
         providerMarker.setRotation(displayBearing);
       }
@@ -2350,7 +2348,7 @@
 
         const currentLng = lerpNumber(from[0], target[0], easedPosition);
         const currentLat = lerpNumber(from[1], target[1], easedPosition);
-        const currentBearing = target[2];
+        const currentBearing = lerpBearing(from[2], target[2], easedBearing);
 
         smoothProviderPoint = [currentLng, currentLat, currentBearing];
         smoothProviderBearing = currentBearing;
