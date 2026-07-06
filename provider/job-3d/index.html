@@ -703,6 +703,15 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Navigation Tracking v18
+    let lastAcceptedGpsLngLat = null;
+    let lastAcceptedGpsAt = 0;
+
+    const NAVIGATION_SNAP_BACKTRACK_SEGMENTS = 2;
+    const NAVIGATION_SNAP_LOOKAHEAD_SEGMENTS = 80;
+    const NAVIGATION_MIN_GPS_MOVE_METERS = 1.5;
+    const NAVIGATION_HARD_CATCHUP_METERS = 75;
+
     // Route Progress v17
     let fullRouteLinePoints = [];
     let routeProgressLastIndex = 0;
@@ -716,10 +725,10 @@
     let smoothProviderAnimationFrame = 0;
     let lastProviderCameraAt = 0;
 
-    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 650;
-    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 1800;
-    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 900;
-    const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 200;
+    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 220;
+    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 850;
+    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 450;
+    const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 150;
 
 
     function getToken() {
@@ -1340,38 +1349,210 @@
       return { x: a.x + abx * t, y: a.y + aby * t, indexRatio: t };
     }
 
-    function nearestRoutePoint(lng, lat) {
-      if (!routePoints.length || !map) return [lng, lat, map ? map.getBearing() : 0];
 
-      const providerScreenPoint = map.project([lng, lat]);
-      let bestScreenPoint = null;
-      let bestDistance = Infinity;
-      let bestIndex = 0;
+    function bearingBetweenLngLat(from, to) {
+      if (!from || !to) return 0;
 
-      for (let i = 0; i < routePoints.length - 1; i++) {
-        const a = map.project(routePoints[i]);
-        const b = map.project(routePoints[i + 1]);
-        const candidate = closestPointOnSegment(providerScreenPoint, a, b);
+      const lng1 = Number(from[0]);
+      const lat1 = Number(from[1]);
+      const lng2 = Number(to[0]);
+      const lat2 = Number(to[1]);
 
-        const dx = providerScreenPoint.x - candidate.x;
-        const dy = providerScreenPoint.y - candidate.y;
-        const distance = dx * dx + dy * dy;
+      if (
+        !Number.isFinite(lng1) ||
+        !Number.isFinite(lat1) ||
+        !Number.isFinite(lng2) ||
+        !Number.isFinite(lat2)
+      ) {
+        return 0;
+      }
 
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestScreenPoint = candidate;
-          bestIndex = i;
+      const toRad = Math.PI / 180;
+      const toDeg = 180 / Math.PI;
+
+      const phi1 = lat1 * toRad;
+      const phi2 = lat2 * toRad;
+      const deltaLambda = (lng2 - lng1) * toRad;
+
+      const y = Math.sin(deltaLambda) * Math.cos(phi2);
+      const x =
+        Math.cos(phi1) * Math.sin(phi2) -
+        Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+      return normalizeProviderBearing(Math.atan2(y, x) * toDeg);
+    }
+
+    function bearingDifferenceDegrees(a, b) {
+      const from = normalizeProviderBearing(a);
+      const to = normalizeProviderBearing(b);
+      let diff = Math.abs(from - to);
+
+      if (diff > 180) diff = 360 - diff;
+
+      return diff;
+    }
+
+    function routeBearingAtIndex(index, point) {
+      if (!Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return smoothProviderBearing || 0;
+      }
+
+      const safeIndex = Math.max(
+        0,
+        Math.min(Number(index) || 0, fullRouteLinePoints.length - 2),
+      );
+
+      const currentPoint = point || fullRouteLinePoints[safeIndex];
+      const nextPoint = fullRouteLinePoints[safeIndex + 1];
+
+      if (currentPoint && nextPoint) {
+        return bearingBetweenLngLat(currentPoint, nextPoint);
+      }
+
+      const previousPoint = fullRouteLinePoints[Math.max(0, safeIndex - 1)];
+      const fallbackPoint = fullRouteLinePoints[safeIndex];
+
+      return bearingBetweenLngLat(previousPoint, fallbackPoint);
+    }
+
+    function projectPointToRouteSegment(px, py, ax, ay, bx, by) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+
+      if (len2 <= 0) {
+        return { x: ax, y: ay, t: 0 };
+      }
+
+      const rawT = ((px - ax) * dx + (py - ay) * dy) / len2;
+      const t = Math.max(0, Math.min(1, rawT));
+
+      return {
+        x: ax + dx * t,
+        y: ay + dy * t,
+        t,
+      };
+    }
+
+    function findForwardRouteSnap(lng, lat) {
+      if (
+        !map ||
+        !Array.isArray(fullRouteLinePoints) ||
+        fullRouteLinePoints.length < 2
+      ) {
+        return null;
+      }
+
+      const gpsPoint = [Number(lng), Number(lat)];
+
+      if (!Number.isFinite(gpsPoint[0]) || !Number.isFinite(gpsPoint[1])) {
+        return null;
+      }
+
+      const cursorIndex = Math.max(0, Number(routeProgressLastIndex) || 0);
+      const startIndex = Math.max(0, cursorIndex - NAVIGATION_SNAP_BACKTRACK_SEGMENTS);
+      const endIndex = Math.min(
+        fullRouteLinePoints.length - 2,
+        Math.max(startIndex + 1, cursorIndex + NAVIGATION_SNAP_LOOKAHEAD_SEGMENTS),
+      );
+
+      const gpsScreen = map.project(gpsPoint);
+      const rawGpsBearing =
+        lastAcceptedGpsLngLat &&
+        distanceMetersBetweenLngLat(lastAcceptedGpsLngLat, gpsPoint) >= 3
+          ? bearingBetweenLngLat(lastAcceptedGpsLngLat, gpsPoint)
+          : null;
+
+      let best = null;
+
+      for (let i = startIndex; i <= endIndex; i += 1) {
+        const aCoord = fullRouteLinePoints[i];
+        const bCoord = fullRouteLinePoints[i + 1];
+
+        if (!aCoord || !bCoord) continue;
+
+        const a = map.project(aCoord);
+        const b = map.project(bCoord);
+
+        const projected = projectPointToRouteSegment(
+          gpsScreen.x,
+          gpsScreen.y,
+          a.x,
+          a.y,
+          b.x,
+          b.y,
+        );
+
+        const dx = gpsScreen.x - projected.x;
+        const dy = gpsScreen.y - projected.y;
+        const distancePixelsSquared = dx * dx + dy * dy;
+
+        const lngLat = map.unproject([projected.x, projected.y]);
+        const snappedPoint = [lngLat.lng, lngLat.lat];
+        const routeBearing = routeBearingAtIndex(i, snappedPoint);
+
+        const backwardPenalty = i < cursorIndex ? 5000 * (cursorIndex - i) : 0;
+        const forwardJumpPenalty = Math.max(0, i - cursorIndex) * 3;
+        const headingPenalty =
+          rawGpsBearing === null
+            ? 0
+            : bearingDifferenceDegrees(rawGpsBearing, routeBearing) * 1.8;
+
+        const score =
+          distancePixelsSquared +
+          backwardPenalty +
+          forwardJumpPenalty +
+          headingPenalty;
+
+        if (!best || score < best.score) {
+          best = {
+            index: i,
+            point: snappedPoint,
+            bearing: routeBearing,
+            score,
+            distancePixelsSquared,
+          };
         }
       }
 
-      if (!bestScreenPoint) return [lng, lat, map.getBearing()];
+      return best;
+    }
 
-      const snapped = map.unproject(bestScreenPoint);
-      const current = [snapped.lng, snapped.lat];
-      const next = routePoints[Math.min(bestIndex + 1, routePoints.length - 1)];
-      const bearing = bearingBetween(current, next);
+    function providerAnimationDurationMs(moveDistanceMeters) {
+      const distance = Number(moveDistanceMeters) || 0;
 
-      return [current[0], current[1], bearing];
+      if (distance >= NAVIGATION_HARD_CATCHUP_METERS) return 180;
+      if (distance >= 45) return 260;
+      if (distance >= 22) return 360;
+      if (distance >= 8) return 480;
+
+      return 560;
+    }
+
+
+    function nearestRoutePoint(lng, lat) {
+      const snap = findForwardRouteSnap(lng, lat);
+
+      if (snap) {
+        const nextIndex = Math.max(routeProgressLastIndex, snap.index);
+        routeProgressLastIndex = nextIndex;
+
+        return [
+          snap.point[0],
+          snap.point[1],
+          snap.bearing,
+          nextIndex,
+          snap.distancePixelsSquared,
+        ];
+      }
+
+      return [
+        Number(lng),
+        Number(lat),
+        smoothProviderBearing || 0,
+        routeProgressLastIndex || 0,
+        null,
+      ];
     }
 
     function drawEncodedRoute(encoded) {
@@ -1524,11 +1705,20 @@
       ];
 
       const moveDistanceMeters = distanceMetersBetweenLngLat(from, target);
+
+      if (moveDistanceMeters >= 140) {
+        smoothProviderPoint = target;
+        smoothProviderBearing = target[2];
+        setProviderMarker(target[0], target[1], target[2]);
+        updateRouteProgressFromProvider(target[0], target[1], true);
+        return;
+      }
+
       const durationMs = Math.max(
         SMOOTH_PROVIDER_MIN_ANIMATION_MS,
         Math.min(
           SMOOTH_PROVIDER_MAX_ANIMATION_MS,
-          SMOOTH_PROVIDER_MIN_ANIMATION_MS + moveDistanceMeters * 18,
+          providerAnimationDurationMs(moveDistanceMeters),
         ),
       );
 
@@ -1600,55 +1790,21 @@
         return null;
       }
 
-      const providerScreen = map.project([lng, lat]);
-      let best = null;
+      const snap = findForwardRouteSnap(lng, lat);
 
-      for (let i = 0; i < fullRouteLinePoints.length - 1; i += 1) {
-        const aCoord = fullRouteLinePoints[i];
-        const bCoord = fullRouteLinePoints[i + 1];
+      if (!snap) return null;
 
-        if (!aCoord || !bCoord) continue;
-
-        const a = map.project(aCoord);
-        const b = map.project(bCoord);
-
-        const projected = projectRouteProgressPoint(
-          providerScreen.x,
-          providerScreen.y,
-          a.x,
-          a.y,
-          b.x,
-          b.y,
-        );
-
-        const dx = providerScreen.x - projected.x;
-        const dy = providerScreen.y - projected.y;
-        const dist2 = dx * dx + dy * dy;
-
-        if (!best || dist2 < best.dist2) {
-          const lngLat = map.unproject([projected.x, projected.y]);
-
-          best = {
-            index: i,
-            dist2,
-            point: [lngLat.lng, lngLat.lat],
-          };
-        }
-      }
-
-      if (!best) return null;
-
-      const safeIndex = Math.max(routeProgressLastIndex, best.index);
-      routeProgressLastIndex = safeIndex;
+      const nextIndex = Math.max(routeProgressLastIndex, snap.index);
+      routeProgressLastIndex = nextIndex;
 
       const startPoint =
-        best.index >= safeIndex
-          ? best.point
-          : fullRouteLinePoints[safeIndex];
+        snap.index >= nextIndex
+          ? snap.point
+          : fullRouteLinePoints[nextIndex] || snap.point;
 
       const remaining = [
         startPoint,
-        ...fullRouteLinePoints.slice(safeIndex + 1),
+        ...fullRouteLinePoints.slice(nextIndex + 1),
       ].filter(Boolean);
 
       if (remaining.length >= 2) {
@@ -1698,11 +1854,25 @@
         return;
       }
 
+      const rawPoint = [lng, lat];
+      const now = Date.now();
+
+      if (lastAcceptedGpsLngLat) {
+        const movedMeters = distanceMetersBetweenLngLat(lastAcceptedGpsLngLat, rawPoint);
+        const secondsSinceLastGps = Math.max(0.1, (now - lastAcceptedGpsAt) / 1000);
+
+        if (movedMeters < NAVIGATION_MIN_GPS_MOVE_METERS && secondsSinceLastGps < 2.5) {
+          return;
+        }
+      }
+
       const snapped = nearestRoutePoint(lng, lat);
       lastProviderPoint = snapped;
 
-      updateRouteProgressFromProvider(snapped[0], snapped[1], true);
+      lastAcceptedGpsLngLat = rawPoint;
+      lastAcceptedGpsAt = now;
 
+      updateRouteProgressFromProvider(snapped[0], snapped[1], true);
       animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
     }
