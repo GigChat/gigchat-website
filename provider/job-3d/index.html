@@ -703,15 +703,6 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
-    // Camera Response v29
-    let lastCameraBearing = null;
-    let lastCameraCenter = null;
-
-    const CAMERA_RESPONSE_DURATION_MS = 120;
-    const CAMERA_RESPONSE_BIG_TURN_DURATION_MS = 80;
-    const CAMERA_RESPONSE_MIN_BEARING_CHANGE_DEGREES = 2;
-    const CAMERA_RESPONSE_MIN_CENTER_MOVE_METERS = 1.5;
-
 // Provider Fast Bearing v23
     let lastLiveHeading = null;
     let lastLiveHeadingAt = 0;
@@ -765,7 +756,7 @@
 
     const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 70;
     const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 280;
-    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 80;
+    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 180;
     const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 150;
 
 
@@ -2200,49 +2191,20 @@
     }
 
     function cameraToProvider(lng, lat, bearing) {
-      if (!map || !map.easeTo) return;
-
-      const nextCenter = [Number(lng), Number(lat)];
-      const nextBearing = normalizeProviderBearing(Number(bearing));
-
-      if (
-        !Number.isFinite(nextCenter[0]) ||
-        !Number.isFinite(nextCenter[1]) ||
-        !Number.isFinite(nextBearing)
-      ) {
-        return;
-      }
-
-      const movedMeters = lastCameraCenter
-        ? distanceMetersBetweenLngLat(lastCameraCenter, nextCenter)
-        : Infinity;
-
-      const bearingChange = Number.isFinite(Number(lastCameraBearing))
-        ? bearingDifferenceDegrees(lastCameraBearing, nextBearing)
-        : Infinity;
-
-      if (
-        movedMeters < CAMERA_RESPONSE_MIN_CENTER_MOVE_METERS &&
-        bearingChange < CAMERA_RESPONSE_MIN_BEARING_CHANGE_DEGREES
-      ) {
-        return;
-      }
-
-      lastCameraCenter = nextCenter;
-      lastCameraBearing = nextBearing;
-
-      const duration =
-        bearingChange >= 25
-          ? CAMERA_RESPONSE_BIG_TURN_DURATION_MS
-          : CAMERA_RESPONSE_DURATION_MS;
+      if (!map) return;
 
       map.easeTo({
-        center: nextCenter,
-        bearing: nextBearing,
-        pitch: 62,
-        zoom: Math.max(map.getZoom ? map.getZoom() : 18, 18),
-        duration,
-        essential: true,
+        center: [lng, lat],
+        zoom: 17.7,
+        pitch: 64,
+        bearing: Number.isFinite(bearing) ? bearing : map.getBearing(),
+        duration: 800,
+        padding: {
+          top: 130,
+          bottom: 330,
+          left: 0,
+          right: 0,
+        },
       });
     }
 
@@ -2404,16 +2366,8 @@
 
     function smoothCameraToProvider(lng, lat, bearing) {
       const now = Date.now();
-      const currentBearing = normalizeProviderBearing(Number(bearing));
-      const bearingChange = Number.isFinite(Number(lastCameraBearing))
-        ? bearingDifferenceDegrees(lastCameraBearing, currentBearing)
-        : Infinity;
 
-      // Big turns should rotate immediately, not wait for interval.
-      if (
-        bearingChange < 18 &&
-        now - lastProviderCameraAt < SMOOTH_PROVIDER_CAMERA_INTERVAL_MS
-      ) {
+      if (now - lastProviderCameraAt < SMOOTH_PROVIDER_CAMERA_INTERVAL_MS) {
         return;
       }
 
