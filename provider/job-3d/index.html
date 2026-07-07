@@ -703,6 +703,9 @@
     let wakeLock = null;
     let lastProviderPoint = null;
     let providerMarker = null;
+    // Service Area DOM Circle v32
+    let serviceAreaDomMarker = null;
+
     // Initial Camera Align v30
     let initialCameraAligned = false;
 
@@ -2161,6 +2164,58 @@
     }
 
 
+
+    function updateServiceAreaDomCircle(lng, lat) {
+      const serviceLng = Number(lng);
+      const serviceLat = Number(lat);
+
+      if (!Number.isFinite(serviceLng) || !Number.isFinite(serviceLat)) return;
+      if (!map || !window.maplibregl) return;
+
+      const size = 132;
+
+      let element = document.getElementById("serviceAreaDomCircle");
+
+      if (!element) {
+        element = document.createElement("div");
+        element.id = "serviceAreaDomCircle";
+        element.style.width = `${size}px`;
+        element.style.height = `${size}px`;
+        element.style.borderRadius = "999px";
+        element.style.background = "rgba(255, 79, 115, 0.24)";
+        element.style.border = "3px solid rgba(255, 123, 149, 0.95)";
+        element.style.boxShadow = "0 0 26px rgba(255, 79, 115, 0.50)";
+        element.style.pointerEvents = "none";
+
+        const dot = document.createElement("div");
+        dot.style.position = "absolute";
+        dot.style.left = "50%";
+        dot.style.top = "50%";
+        dot.style.width = "14px";
+        dot.style.height = "14px";
+        dot.style.marginLeft = "-7px";
+        dot.style.marginTop = "-7px";
+        dot.style.borderRadius = "999px";
+        dot.style.background = "#ffffff";
+        dot.style.boxShadow = "0 0 14px rgba(255,255,255,0.75)";
+
+        element.style.position = "relative";
+        element.appendChild(dot);
+      }
+
+      if (!serviceAreaDomMarker) {
+        serviceAreaDomMarker = new maplibregl.Marker({
+          element,
+          anchor: "center",
+          rotationAlignment: "viewport",
+          pitchAlignment: "viewport",
+        }).setLngLat([serviceLng, serviceLat]).addTo(map);
+      } else {
+        serviceAreaDomMarker.setLngLat([serviceLng, serviceLat]);
+      }
+    }
+
+
     function updateServiceAreaCircle(lng, lat) {
       const serviceLng = Number(lng);
       const serviceLat = Number(lat);
@@ -2183,6 +2238,7 @@
       }
 
       keepServiceAreaCircleVisible();
+      updateServiceAreaDomCircle(serviceLng, serviceLat);
     }
 
 
