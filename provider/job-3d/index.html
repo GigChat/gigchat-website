@@ -1334,7 +1334,7 @@
           source: "service-area",
           paint: {
             "fill-color": "#ff4f73",
-            "fill-opacity": 0.16,
+            "fill-opacity": 0.28,
           },
         });
 
@@ -1344,8 +1344,8 @@
           source: "service-area",
           paint: {
             "line-color": "#ff6f8d",
-            "line-width": 2,
-            "line-opacity": 0.85,
+            "line-width": 4,
+            "line-opacity": 1,
           },
         });
 
@@ -2133,6 +2133,34 @@
       };
     }
 
+
+    // Service Area Circle Visible v31
+    function keepServiceAreaCircleVisible() {
+      if (!map || !map.getLayer || !map.moveLayer || !map.setPaintProperty) return;
+
+      try {
+        if (map.getLayer("service-area-fill")) {
+          map.setPaintProperty("service-area-fill", "fill-color", "#ff4f73");
+          map.setPaintProperty("service-area-fill", "fill-opacity", 0.28);
+          map.moveLayer("service-area-fill");
+        }
+
+        if (map.getLayer("service-area-outline")) {
+          map.setPaintProperty("service-area-outline", "line-color", "#ff7b95");
+          map.setPaintProperty("service-area-outline", "line-width", 4);
+          map.setPaintProperty("service-area-outline", "line-opacity", 1);
+          map.moveLayer("service-area-outline");
+        }
+
+        if (map.getLayer("destination-point")) {
+          map.moveLayer("destination-point");
+        }
+      } catch (error) {
+        console.warn("Service area visibility refresh failed", error);
+      }
+    }
+
+
     function updateServiceAreaCircle(lng, lat) {
       const serviceLng = Number(lng);
       const serviceLat = Number(lat);
@@ -2153,6 +2181,8 @@
       if (destinationSource && typeof destinationSource.setData === "function") {
         destinationSource.setData(servicePointGeoJson(serviceLng, serviceLat));
       }
+
+      keepServiceAreaCircleVisible();
     }
 
 
