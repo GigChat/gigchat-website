@@ -2216,6 +2216,51 @@
     }
 
 
+
+    // Destination Circle Layer v33
+    function ensureDestinationCircleLayer() {
+      if (!map || !map.getSource || !map.addLayer || !map.getLayer) return;
+      if (!map.getSource("destination")) return;
+
+      try {
+        if (!map.getLayer("destination-area-circle")) {
+          map.addLayer({
+            id: "destination-area-circle",
+            type: "circle",
+            source: "destination",
+            paint: {
+              "circle-radius": 64,
+              "circle-color": "#ff4f73",
+              "circle-opacity": 0.26,
+              "circle-stroke-color": "#ff7b95",
+              "circle-stroke-width": 4,
+              "circle-stroke-opacity": 1,
+              "circle-blur": 0.12,
+            },
+          });
+        }
+
+        map.setPaintProperty("destination-area-circle", "circle-radius", 64);
+        map.setPaintProperty("destination-area-circle", "circle-color", "#ff4f73");
+        map.setPaintProperty("destination-area-circle", "circle-opacity", 0.26);
+        map.setPaintProperty("destination-area-circle", "circle-stroke-color", "#ff7b95");
+        map.setPaintProperty("destination-area-circle", "circle-stroke-width", 4);
+        map.setPaintProperty("destination-area-circle", "circle-stroke-opacity", 1);
+
+        // Keep circle visible, then keep white point above it.
+        if (map.getLayer("destination-area-circle") && map.moveLayer) {
+          map.moveLayer("destination-area-circle");
+        }
+
+        if (map.getLayer("destination-point") && map.moveLayer) {
+          map.moveLayer("destination-point");
+        }
+      } catch (error) {
+        console.warn("Destination circle layer refresh failed", error);
+      }
+    }
+
+
     function updateServiceAreaCircle(lng, lat) {
       const serviceLng = Number(lng);
       const serviceLat = Number(lat);
@@ -2236,6 +2281,8 @@
       if (destinationSource && typeof destinationSource.setData === "function") {
         destinationSource.setData(servicePointGeoJson(serviceLng, serviceLat));
       }
+
+      ensureDestinationCircleLayer();
 
       keepServiceAreaCircleVisible();
       updateServiceAreaDomCircle(serviceLng, serviceLat);
