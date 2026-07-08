@@ -776,7 +776,7 @@
     }
 
     function isProviderSimulatorEnabled() {
-      // Provider Route Simulator v39
+      // Provider Route Simulator v40
       const url = new URL(window.location.href);
       const value = String(url.searchParams.get("sim") || "").trim().toLowerCase();
       return value === "1" || value === "true" || value === "yes";
@@ -2642,7 +2642,7 @@
     }
 
     function buildProviderSimulatorStartPoint(centerLng, centerLat) {
-      // Provider Route Simulator v39
+      // Provider Route Simulator v40
       const lng = Number(centerLng);
       const lat = Number(centerLat);
 
@@ -2658,36 +2658,51 @@
     }
 
     function providerSimulatorPositionFromCoords(coords) {
-      // Provider Route Simulator v39
+      // Provider Route Simulator v40
       return {
         coords: {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy || 8,
-          speed: coords.speed || 13.4,
-          heading: coords.heading || 45,
+          latitude: Number(coords.latitude),
+          longitude: Number(coords.longitude),
+          accuracy: Number.isFinite(Number(coords.accuracy)) ? Number(coords.accuracy) : 8,
+          speed: Number.isFinite(Number(coords.speed)) ? Number(coords.speed) : 13.4,
+          heading: Number.isFinite(Number(coords.heading)) ? Number(coords.heading) : 45,
         },
       };
     }
 
-    function providerSimulatorPointAtIndex(points, index) {
-      // Provider Route Simulator v39
-      const safeIndex = Math.max(0, Math.min(points.length - 1, index));
-      const current = points[safeIndex];
-      const next = points[Math.min(safeIndex + 1, points.length - 1)];
-
+    function providerSimulatorPositionFromRoutePoint(current, next) {
+      // Provider Route Simulator v40
       const bearing =
-        safeIndex < points.length - 1
+        next && Array.isArray(next)
           ? bearingBetweenLngLat(current, next)
           : Number.isFinite(smoothProviderBearing)
             ? smoothProviderBearing
             : 0;
 
-      return [current[0], current[1], bearing];
+      return providerSimulatorPositionFromCoords({
+        latitude: current[1],
+        longitude: current[0],
+        accuracy: 8,
+        speed: 13.4,
+        heading: bearing,
+      });
+    }
+
+    function handleProviderSimulatorPosition(position) {
+      // Provider Route Simulator v40
+      const coords = position.coords || {};
+
+      if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
+        return;
+      }
+
+      updateProviderSpeedDebug(coords);
+      updateLiveHeadingFromCoords(coords);
+      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
     }
 
     async function startProviderRouteSimulator() {
-      // Provider Route Simulator v39
+      // Provider Route Simulator v40
       if (!isProviderSimulatorEnabled()) return;
 
       if (!map || (typeof map.loaded === "function" && !map.loaded())) {
@@ -2714,7 +2729,7 @@
       navBtn.disabled = true;
       navBtn.textContent = "Simulator on";
       turnMainEl.textContent = "Simulator mode active";
-      turnSubEl.textContent = "Loading real route for marker test";
+      turnSubEl.textContent = "Loading real route through live pipeline";
       setStatus("Simulator loading real route...");
 
       try {
@@ -2736,45 +2751,45 @@
           return;
         }
 
-        routeProgressLastIndex = 0;
-        lastAcceptedGpsLngLat = null;
-        smoothProviderPoint = null;
+        const simulatorRoutePoints = fullRouteLinePoints.slice();
 
-        const stride = Math.max(1, Math.floor(fullRouteLinePoints.length / 80));
+        routeProgressLastIndex = 0;
+        routeProgressLastUpdateAt = 0;
+        lastAcceptedGpsLngLat = null;
+        lastAcceptedGpsAt = 0;
+        smoothProviderPoint = null;
+        initialCameraAligned = false;
+
+        const stride = Math.max(1, Math.floor(simulatorRoutePoints.length / 70));
         let index = 0;
 
-        setStatus("Simulator following real route. No GPS permission needed.");
-        turnSubEl.textContent = "Following backend route polyline";
+        setStatus("Simulator using live navigation pipeline. No GPS permission needed.");
+        turnSubEl.textContent = "Fake GPS flowing through updateProviderCamera";
 
         const tick = () => {
-          const point = providerSimulatorPointAtIndex(fullRouteLinePoints, index);
+          const safeIndex = Math.max(0, Math.min(index, simulatorRoutePoints.length - 1));
+          const current = simulatorRoutePoints[safeIndex];
+          const next = simulatorRoutePoints[Math.min(safeIndex + 1, simulatorRoutePoints.length - 1)];
 
-          lastProviderPoint = point;
-
-          updateGpsNavigationMeter(point[0], point[1], point[2]);
-          updateRouteProgressFromProvider(point[0], point[1], true);
-          animateProviderMarkerTo(point[0], point[1], point[2]);
-          smoothCameraToProvider(point[0], point[1], point[2]);
+          handleProviderSimulatorPosition(
+            providerSimulatorPositionFromRoutePoint(current, next)
+          );
 
           index += stride;
 
-          if (index >= fullRouteLinePoints.length) {
-            const finalPoint = providerSimulatorPointAtIndex(
-              fullRouteLinePoints,
-              fullRouteLinePoints.length - 1
-            );
+          if (index >= simulatorRoutePoints.length) {
+            const finalPoint = simulatorRoutePoints[simulatorRoutePoints.length - 1];
+            const previousPoint = simulatorRoutePoints[Math.max(0, simulatorRoutePoints.length - 2)];
 
-            animateProviderMarkerTo(finalPoint[0], finalPoint[1], finalPoint[2]);
-            cameraToProvider(finalPoint[0], finalPoint[1], finalPoint[2]);
+            handleProviderSimulatorPosition(
+              providerSimulatorPositionFromRoutePoint(finalPoint, previousPoint)
+            );
 
             clearInterval(window.__gigchatProviderRouteSimulatorTimer);
             window.__gigchatProviderRouteSimulatorTimer = null;
             setStatus("Simulator complete. Refresh to run again.");
           }
         };
-
-        const firstPoint = providerSimulatorPointAtIndex(fullRouteLinePoints, 0);
-        cameraToProvider(firstPoint[0], firstPoint[1], firstPoint[2]);
 
         tick();
         window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, 1200);
