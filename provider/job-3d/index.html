@@ -776,7 +776,7 @@
     }
 
     function isProviderSimulatorEnabled() {
-      // Provider Route Simulator v38
+      // Provider Route Simulator v39
       const url = new URL(window.location.href);
       const value = String(url.searchParams.get("sim") || "").trim().toLowerCase();
       return value === "1" || value === "true" || value === "yes";
@@ -2641,40 +2641,53 @@
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
     }
 
-    function buildProviderSimulatorPoints(centerLng, centerLat) {
-      // Provider Route Simulator v38
+    function buildProviderSimulatorStartPoint(centerLng, centerLat) {
+      // Provider Route Simulator v39
       const lng = Number(centerLng);
       const lat = Number(centerLat);
 
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return [];
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
 
-      const offsets = [
-        [-0.0108, -0.0084],
-        [-0.0102, -0.0079],
-        [-0.0096, -0.0073],
-        [-0.0090, -0.0068],
-        [-0.0084, -0.0063],
-        [-0.0078, -0.0058],
-        [-0.0072, -0.0053],
-        [-0.0066, -0.0048],
-        [-0.0060, -0.0043],
-        [-0.0054, -0.0038],
-        [-0.0048, -0.0033],
-        [-0.0042, -0.0028],
-        [-0.0036, -0.0023],
-        [-0.0030, -0.0018],
-        [-0.0024, -0.0014],
-        [-0.0018, -0.0010],
-        [-0.0012, -0.0006],
-        [-0.0006, -0.0003],
-        [0, 0],
-      ];
-
-      return offsets.map((point) => [lng + point[0], lat + point[1]]);
+      return {
+        longitude: lng - 0.018,
+        latitude: lat - 0.014,
+        accuracy: 8,
+        speed: 13.4,
+        heading: 45,
+      };
     }
 
-    function startProviderRouteSimulator() {
-      // Provider Route Simulator v38
+    function providerSimulatorPositionFromCoords(coords) {
+      // Provider Route Simulator v39
+      return {
+        coords: {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy || 8,
+          speed: coords.speed || 13.4,
+          heading: coords.heading || 45,
+        },
+      };
+    }
+
+    function providerSimulatorPointAtIndex(points, index) {
+      // Provider Route Simulator v39
+      const safeIndex = Math.max(0, Math.min(points.length - 1, index));
+      const current = points[safeIndex];
+      const next = points[Math.min(safeIndex + 1, points.length - 1)];
+
+      const bearing =
+        safeIndex < points.length - 1
+          ? bearingBetweenLngLat(current, next)
+          : Number.isFinite(smoothProviderBearing)
+            ? smoothProviderBearing
+            : 0;
+
+      return [current[0], current[1], bearing];
+    }
+
+    async function startProviderRouteSimulator() {
+      // Provider Route Simulator v39
       if (!isProviderSimulatorEnabled()) return;
 
       if (!map || (typeof map.loaded === "function" && !map.loaded())) {
@@ -2687,55 +2700,89 @@
         window.__gigchatProviderRouteSimulatorTimer = null;
       }
 
-      const points = buildProviderSimulatorPoints(exactLng, exactLat);
+      const fakeStart = buildProviderSimulatorStartPoint(exactLng, exactLat);
 
-      if (!points.length) {
+      if (!fakeStart) {
         setStatus("Simulator failed: missing map coordinates.");
         return;
       }
 
-      let index = 0;
-      followProvider = false;
+      followProvider = true;
 
       if (screenEl) screenEl.classList.add("live");
 
       navBtn.disabled = true;
       navBtn.textContent = "Simulator on";
       turnMainEl.textContent = "Simulator mode active";
-      turnSubEl.textContent = "Testing provider marker movement";
-      setStatus("Simulator running. No GPS or backend pings.");
+      turnSubEl.textContent = "Loading real route for marker test";
+      setStatus("Simulator loading real route...");
 
-      const tick = () => {
-        const current = points[index];
-        const next = points[Math.min(index + 1, points.length - 1)];
+      try {
+        const eta = await sendProviderLocationPing(
+          providerSimulatorPositionFromCoords(fakeStart)
+        );
 
-        const bearing =
-          index < points.length - 1
-            ? bearingBetweenLngLat(current, next)
-            : Number.isFinite(smoothProviderBearing)
-              ? smoothProviderBearing
-              : 0;
+        updateEtaUI(eta);
+        setNavigationRouteStepsFromEta(eta);
 
-        lastProviderPoint = [current[0], current[1], bearing];
+        const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
 
-        updateGpsNavigationMeter(current[0], current[1], bearing);
-        animateProviderMarkerTo(current[0], current[1], bearing);
-
-        if (index === 0) {
-          cameraToProvider(current[0], current[1], bearing);
+        if (
+          !routeLoaded ||
+          !Array.isArray(fullRouteLinePoints) ||
+          fullRouteLinePoints.length < 2
+        ) {
+          setStatus("Simulator failed: backend did not return a route.");
+          return;
         }
 
-        index += 1;
+        routeProgressLastIndex = 0;
+        lastAcceptedGpsLngLat = null;
+        smoothProviderPoint = null;
 
-        if (index >= points.length) {
-          clearInterval(window.__gigchatProviderRouteSimulatorTimer);
-          window.__gigchatProviderRouteSimulatorTimer = null;
-          setStatus("Simulator complete. Refresh to run again.");
-        }
-      };
+        const stride = Math.max(1, Math.floor(fullRouteLinePoints.length / 80));
+        let index = 0;
 
-      tick();
-      window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, 1200);
+        setStatus("Simulator following real route. No GPS permission needed.");
+        turnSubEl.textContent = "Following backend route polyline";
+
+        const tick = () => {
+          const point = providerSimulatorPointAtIndex(fullRouteLinePoints, index);
+
+          lastProviderPoint = point;
+
+          updateGpsNavigationMeter(point[0], point[1], point[2]);
+          updateRouteProgressFromProvider(point[0], point[1], true);
+          animateProviderMarkerTo(point[0], point[1], point[2]);
+          smoothCameraToProvider(point[0], point[1], point[2]);
+
+          index += stride;
+
+          if (index >= fullRouteLinePoints.length) {
+            const finalPoint = providerSimulatorPointAtIndex(
+              fullRouteLinePoints,
+              fullRouteLinePoints.length - 1
+            );
+
+            animateProviderMarkerTo(finalPoint[0], finalPoint[1], finalPoint[2]);
+            cameraToProvider(finalPoint[0], finalPoint[1], finalPoint[2]);
+
+            clearInterval(window.__gigchatProviderRouteSimulatorTimer);
+            window.__gigchatProviderRouteSimulatorTimer = null;
+            setStatus("Simulator complete. Refresh to run again.");
+          }
+        };
+
+        const firstPoint = providerSimulatorPointAtIndex(fullRouteLinePoints, 0);
+        cameraToProvider(firstPoint[0], firstPoint[1], firstPoint[2]);
+
+        tick();
+        window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, 1200);
+      } catch (err) {
+        console.warn("PROVIDER ROUTE SIMULATOR FAILED:", err);
+        const message = err && err.message ? err.message : String(err || "Unknown error");
+        setStatus("Simulator failed: " + message.slice(0, 120));
+      }
     }
 
     async function sendProviderLocationPing(position) {
