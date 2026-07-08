@@ -2001,24 +2001,10 @@
     }
 
     function chooseProviderBearing(routeBearing) {
-      const liveHeading = getFreshLiveHeading();
-
-      if (liveHeading === null) {
-        return normalizeProviderBearing(routeBearing);
-      }
-
-      const route = normalizeProviderBearing(routeBearing);
-      const diff = bearingDifferenceDegrees(liveHeading, route);
-
-      // If live heading is close to the route, use it for faster response.
-      // If it is very different, trust the route so the arrow does not point into wrong streets.
-      if (diff <= 55) {
-        return lerpBearing(route, liveHeading, 0.72);
-      }
-
-      return route;
+      // Provider Arrow Bearing v37
+      // Use route bearing only to avoid small jumps caused by noisy live GPS heading.
+      return normalizeProviderBearing(routeBearing);
     }
-
 
     function nearestRoutePoint(lng, lat) {
       const stepSnap = findStepAwareRouteSnap(lng, lat);
