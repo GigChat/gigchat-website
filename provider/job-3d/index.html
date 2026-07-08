@@ -2008,9 +2008,23 @@
     }
 
     function chooseProviderBearing(routeBearing) {
-      // Provider Arrow Bearing v37
-      // Use route bearing only to avoid small jumps caused by noisy live GPS heading.
-      return normalizeProviderBearing(routeBearing);
+      // Provider Arrow Bearing v42
+      // Smooth route bearing through turns/intersections while still trusting the route.
+      const route = normalizeProviderBearing(routeBearing);
+
+      if (!smoothProviderPoint || !Number.isFinite(Number(smoothProviderBearing))) {
+        return route;
+      }
+
+      const current = normalizeProviderBearing(Number(smoothProviderBearing));
+      const diff = bearingDifferenceDegrees(current, route);
+
+      if (diff < 4) {
+        return current;
+      }
+
+      const factor = diff >= 85 ? 0.62 : diff >= 35 ? 0.48 : 0.34;
+      return lerpBearing(current, route, factor);
     }
 
     function nearestRoutePoint(lng, lat) {
