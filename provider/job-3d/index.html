@@ -1327,7 +1327,7 @@
 
         map.addSource("service-area", {
           type: "geojson",
-          data: serviceAreaCircleGeoJson(-79.53012, 8.9785),
+          data: serviceAreaCircleGeoJson(lng, lat),
         });
 
         map.addLayer({
@@ -2798,7 +2798,6 @@
       exactLat = Number(job.service_latitude);
       exactLng = Number(job.service_longitude);
 
-      updateServiceAreaCircle(exactLng, exactLat);
       showProviderSpeedChipNow();
 
       if (!Number.isFinite(exactLat) || !Number.isFinite(exactLng)) {
@@ -2806,6 +2805,7 @@
       }
 
       createMap(exactLat, exactLng);
+      updateServiceAreaCircle(exactLng, exactLat);
 
       navBtn.addEventListener("click", startLiveNavigation);
       recenterBtn.addEventListener("click", recenter);
