@@ -776,7 +776,7 @@
     }
 
     function isProviderSimulatorEnabled() {
-      // Provider Route Simulator v40
+      // Provider Route Simulator v41
       const url = new URL(window.location.href);
       const value = String(url.searchParams.get("sim") || "").trim().toLowerCase();
       return value === "1" || value === "true" || value === "yes";
@@ -2642,7 +2642,7 @@
     }
 
     function buildProviderSimulatorStartPoint(centerLng, centerLat) {
-      // Provider Route Simulator v40
+      // Provider Route Simulator v41
       const lng = Number(centerLng);
       const lat = Number(centerLat);
 
@@ -2658,7 +2658,7 @@
     }
 
     function providerSimulatorPositionFromCoords(coords) {
-      // Provider Route Simulator v40
+      // Provider Route Simulator v41
       return {
         coords: {
           latitude: Number(coords.latitude),
@@ -2670,26 +2670,111 @@
       };
     }
 
-    function providerSimulatorPositionFromRoutePoint(current, next) {
-      // Provider Route Simulator v40
-      const bearing =
-        next && Array.isArray(next)
-          ? bearingBetweenLngLat(current, next)
-          : Number.isFinite(smoothProviderBearing)
-            ? smoothProviderBearing
-            : 0;
+    function buildProviderSimulatorRouteMetrics(points) {
+      // Provider Route Simulator v41
+      const cumulative = [0];
+      let total = 0;
+
+      for (let i = 1; i < points.length; i += 1) {
+        const prev = points[i - 1];
+        const current = points[i];
+        const segmentMeters = distanceMetersBetweenLngLat(prev, current);
+
+        if (Number.isFinite(segmentMeters) && segmentMeters > 0) {
+          total += segmentMeters;
+        }
+
+        cumulative.push(total);
+      }
+
+      return {
+        cumulative,
+        totalMeters: total,
+      };
+    }
+
+    function interpolateProviderSimulatorPoint(a, b, t) {
+      // Provider Route Simulator v41
+      const safeT = Math.max(0, Math.min(1, Number(t) || 0));
+
+      return [
+        a[0] + (b[0] - a[0]) * safeT,
+        a[1] + (b[1] - a[1]) * safeT,
+      ];
+    }
+
+    function providerSimulatorPointAtDistance(points, metrics, meters) {
+      // Provider Route Simulator v41
+      const targetMeters = Math.max(
+        0,
+        Math.min(Number(meters) || 0, metrics.totalMeters)
+      );
+
+      let index = 0;
+
+      while (
+        index < metrics.cumulative.length - 2 &&
+        metrics.cumulative[index + 1] < targetMeters
+      ) {
+        index += 1;
+      }
+
+      const startMeters = metrics.cumulative[index];
+      const endMeters = metrics.cumulative[index + 1];
+      const segmentMeters = Math.max(0.001, endMeters - startMeters);
+      const t = (targetMeters - startMeters) / segmentMeters;
+
+      const current = interpolateProviderSimulatorPoint(
+        points[index],
+        points[index + 1],
+        t
+      );
+
+      const lookAheadMeters = Math.min(
+        metrics.totalMeters,
+        targetMeters + 35
+      );
+
+      let lookAheadIndex = index;
+
+      while (
+        lookAheadIndex < metrics.cumulative.length - 2 &&
+        metrics.cumulative[lookAheadIndex + 1] < lookAheadMeters
+      ) {
+        lookAheadIndex += 1;
+      }
+
+      const lookStartMeters = metrics.cumulative[lookAheadIndex];
+      const lookEndMeters = metrics.cumulative[lookAheadIndex + 1];
+      const lookSegmentMeters = Math.max(0.001, lookEndMeters - lookStartMeters);
+      const lookT = (lookAheadMeters - lookStartMeters) / lookSegmentMeters;
+
+      const lookAhead = interpolateProviderSimulatorPoint(
+        points[lookAheadIndex],
+        points[lookAheadIndex + 1],
+        lookT
+      );
+
+      const bearing = bearingBetweenLngLat(current, lookAhead);
+
+      return [current[0], current[1], bearing];
+    }
+
+    function providerSimulatorPositionFromRouteDistance(points, metrics, meters) {
+      // Provider Route Simulator v41
+      const point = providerSimulatorPointAtDistance(points, metrics, meters);
 
       return providerSimulatorPositionFromCoords({
-        latitude: current[1],
-        longitude: current[0],
+        latitude: point[1],
+        longitude: point[0],
         accuracy: 8,
         speed: 13.4,
-        heading: bearing,
+        heading: point[2],
       });
     }
 
     function handleProviderSimulatorPosition(position) {
-      // Provider Route Simulator v40
+      // Provider Route Simulator v41
       const coords = position.coords || {};
 
       if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
@@ -2702,7 +2787,7 @@
     }
 
     async function startProviderRouteSimulator() {
-      // Provider Route Simulator v40
+      // Provider Route Simulator v41
       if (!isProviderSimulatorEnabled()) return;
 
       if (!map || (typeof map.loaded === "function" && !map.loaded())) {
@@ -2752,6 +2837,12 @@
         }
 
         const simulatorRoutePoints = fullRouteLinePoints.slice();
+        const metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
+
+        if (!Number.isFinite(metrics.totalMeters) || metrics.totalMeters < 10) {
+          setStatus("Simulator failed: route is too short.");
+          return;
+        }
 
         routeProgressLastIndex = 0;
         routeProgressLastUpdateAt = 0;
@@ -2760,29 +2851,33 @@
         smoothProviderPoint = null;
         initialCameraAligned = false;
 
-        const stride = Math.max(1, Math.floor(simulatorRoutePoints.length / 70));
-        let index = 0;
+        const tickMs = 850;
+        const speedMetersPerSecond = 13.4;
+        const metersPerTick = speedMetersPerSecond * (tickMs / 1000);
 
-        setStatus("Simulator using live navigation pipeline. No GPS permission needed.");
-        turnSubEl.textContent = "Fake GPS flowing through updateProviderCamera";
+        let traveledMeters = 0;
+
+        setStatus("Simulator following route by distance. No GPS permission needed.");
+        turnSubEl.textContent = "Distance-based fake GPS through live pipeline";
 
         const tick = () => {
-          const safeIndex = Math.max(0, Math.min(index, simulatorRoutePoints.length - 1));
-          const current = simulatorRoutePoints[safeIndex];
-          const next = simulatorRoutePoints[Math.min(safeIndex + 1, simulatorRoutePoints.length - 1)];
-
           handleProviderSimulatorPosition(
-            providerSimulatorPositionFromRoutePoint(current, next)
+            providerSimulatorPositionFromRouteDistance(
+              simulatorRoutePoints,
+              metrics,
+              traveledMeters
+            )
           );
 
-          index += stride;
+          traveledMeters += metersPerTick;
 
-          if (index >= simulatorRoutePoints.length) {
-            const finalPoint = simulatorRoutePoints[simulatorRoutePoints.length - 1];
-            const previousPoint = simulatorRoutePoints[Math.max(0, simulatorRoutePoints.length - 2)];
-
+          if (traveledMeters >= metrics.totalMeters) {
             handleProviderSimulatorPosition(
-              providerSimulatorPositionFromRoutePoint(finalPoint, previousPoint)
+              providerSimulatorPositionFromRouteDistance(
+                simulatorRoutePoints,
+                metrics,
+                metrics.totalMeters
+              )
             );
 
             clearInterval(window.__gigchatProviderRouteSimulatorTimer);
@@ -2792,7 +2887,7 @@
         };
 
         tick();
-        window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, 1200);
+        window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, tickMs);
       } catch (err) {
         console.warn("PROVIDER ROUTE SIMULATOR FAILED:", err);
         const message = err && err.message ? err.message : String(err || "Unknown error");
