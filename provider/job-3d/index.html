@@ -775,6 +775,13 @@
       return parts[parts.length - 1] || "";
     }
 
+    function isProviderSimulatorEnabled() {
+      // Provider Route Simulator v38
+      const url = new URL(window.location.href);
+      const value = String(url.searchParams.get("sim") || "").trim().toLowerCase();
+      return value === "1" || value === "true" || value === "yes";
+    }
+
     function setStatus(message) {
       navStatusEl.textContent = message || "";
     }
@@ -2634,6 +2641,103 @@
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
     }
 
+    function buildProviderSimulatorPoints(centerLng, centerLat) {
+      // Provider Route Simulator v38
+      const lng = Number(centerLng);
+      const lat = Number(centerLat);
+
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return [];
+
+      const offsets = [
+        [-0.0108, -0.0084],
+        [-0.0102, -0.0079],
+        [-0.0096, -0.0073],
+        [-0.0090, -0.0068],
+        [-0.0084, -0.0063],
+        [-0.0078, -0.0058],
+        [-0.0072, -0.0053],
+        [-0.0066, -0.0048],
+        [-0.0060, -0.0043],
+        [-0.0054, -0.0038],
+        [-0.0048, -0.0033],
+        [-0.0042, -0.0028],
+        [-0.0036, -0.0023],
+        [-0.0030, -0.0018],
+        [-0.0024, -0.0014],
+        [-0.0018, -0.0010],
+        [-0.0012, -0.0006],
+        [-0.0006, -0.0003],
+        [0, 0],
+      ];
+
+      return offsets.map((point) => [lng + point[0], lat + point[1]]);
+    }
+
+    function startProviderRouteSimulator() {
+      // Provider Route Simulator v38
+      if (!isProviderSimulatorEnabled()) return;
+
+      if (!map || (typeof map.loaded === "function" && !map.loaded())) {
+        setTimeout(startProviderRouteSimulator, 300);
+        return;
+      }
+
+      if (window.__gigchatProviderRouteSimulatorTimer) {
+        clearInterval(window.__gigchatProviderRouteSimulatorTimer);
+        window.__gigchatProviderRouteSimulatorTimer = null;
+      }
+
+      const points = buildProviderSimulatorPoints(exactLng, exactLat);
+
+      if (!points.length) {
+        setStatus("Simulator failed: missing map coordinates.");
+        return;
+      }
+
+      let index = 0;
+      followProvider = false;
+
+      if (screenEl) screenEl.classList.add("live");
+
+      navBtn.disabled = true;
+      navBtn.textContent = "Simulator on";
+      turnMainEl.textContent = "Simulator mode active";
+      turnSubEl.textContent = "Testing provider marker movement";
+      setStatus("Simulator running. No GPS or backend pings.");
+
+      const tick = () => {
+        const current = points[index];
+        const next = points[Math.min(index + 1, points.length - 1)];
+
+        const bearing =
+          index < points.length - 1
+            ? bearingBetweenLngLat(current, next)
+            : Number.isFinite(smoothProviderBearing)
+              ? smoothProviderBearing
+              : 0;
+
+        lastProviderPoint = [current[0], current[1], bearing];
+
+        updateGpsNavigationMeter(current[0], current[1], bearing);
+        animateProviderMarkerTo(current[0], current[1], bearing);
+
+        if (index === 0) {
+          cameraToProvider(current[0], current[1], bearing);
+        }
+
+        index += 1;
+
+        if (index >= points.length) {
+          clearInterval(window.__gigchatProviderRouteSimulatorTimer);
+          window.__gigchatProviderRouteSimulatorTimer = null;
+          setStatus("Simulator complete. Refresh to run again.");
+        }
+      };
+
+      tick();
+      window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, 1200);
+    }
+
     async function sendProviderLocationPing(position) {
       const coords = position.coords || {};
 
@@ -2797,7 +2901,12 @@
       navBtn.addEventListener("click", startLiveNavigation);
       recenterBtn.addEventListener("click", recenter);
 
-      setStatus("Tap Start when you are on the way.");
+      if (isProviderSimulatorEnabled()) {
+        setStatus("Simulator mode loading...");
+        setTimeout(startProviderRouteSimulator, 900);
+      } else {
+        setStatus("Tap Start when you are on the way.");
+      }
     }
 
     document.addEventListener("visibilitychange", async () => {
