@@ -2480,6 +2480,9 @@
     }
 
     function remainingRouteFromProvider(lng, lat) {
+      // Provider Remaining Route v46
+      // Always render the remaining route from the visual snapped provider point.
+      // Do not jump the route start to a future polyline point, because that creates a red-line cut/kink.
       if (!map || !Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
         return null;
       }
@@ -2488,21 +2491,36 @@
 
       if (!snap) return null;
 
-      const nextIndex = Math.max(routeProgressLastIndex, snap.index);
-      routeProgressLastIndex = nextIndex;
+      const snapIndex = Math.max(
+        0,
+        Math.min(Number(snap.index) || 0, fullRouteLinePoints.length - 2)
+      );
 
-      const startPoint =
-        snap.index >= nextIndex
-          ? snap.point
-          : fullRouteLinePoints[nextIndex] || snap.point;
+      const startPoint = Array.isArray(snap.point)
+        ? snap.point
+        : fullRouteLinePoints[snapIndex];
 
-      const remaining = [
-        startPoint,
-        ...fullRouteLinePoints.slice(nextIndex + 1),
-      ].filter(Boolean);
+      if (!Array.isArray(startPoint)) return null;
 
-      if (remaining.length >= 2) {
-        return remaining;
+      routeProgressLastIndex = Math.max(routeProgressLastIndex, snapIndex);
+
+      const nextPoint = fullRouteLinePoints[snapIndex + 1];
+      const remaining = [startPoint];
+
+      if (Array.isArray(nextPoint)) {
+        const distanceToNext = distanceMetersBetweenLngLat(startPoint, nextPoint);
+
+        if (!Number.isFinite(distanceToNext) || distanceToNext > 1.2) {
+          remaining.push(nextPoint);
+        }
+      }
+
+      remaining.push(...fullRouteLinePoints.slice(snapIndex + 2));
+
+      const cleanRemaining = remaining.filter(Boolean);
+
+      if (cleanRemaining.length >= 2) {
+        return cleanRemaining;
       }
 
       const destination = fullRouteLinePoints[fullRouteLinePoints.length - 1];
@@ -2513,6 +2531,7 @@
 
       return null;
     }
+
 
     function updateRouteProgressFromProvider(lng, lat, force = false) {
       const now = Date.now();
@@ -2719,7 +2738,8 @@
       lastAcceptedGpsAt = now;
 
       updateGpsNavigationMeter(snapped[0], snapped[1], snapped[2]);
-      updateRouteProgressFromProvider(snapped[0], snapped[1], true);
+      // Provider Remaining Route v46
+      // Route progress is updated from the animated visual marker, not the raw target.
       alignInitialCameraToProvider(snapped[0], snapped[1], snapped[2]);
       animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
       smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
