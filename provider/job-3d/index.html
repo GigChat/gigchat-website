@@ -1462,20 +1462,89 @@
       return diff;
     }
 
+    function routeLookaheadPointFromIndex(index, point, lookaheadMeters = 38) {
+      // Provider Lookahead Bearing v43
+      if (!Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return null;
+      }
+
+      const safeIndex = Math.max(
+        0,
+        Math.min(Number(index) || 0, fullRouteLinePoints.length - 2)
+      );
+
+      const startPoint = Array.isArray(point) ? point : fullRouteLinePoints[safeIndex];
+
+      if (!Array.isArray(startPoint)) {
+        return null;
+      }
+
+      let remainingMeters = Math.max(8, Number(lookaheadMeters) || 38);
+      let previousPoint = startPoint;
+
+      for (let i = safeIndex; i < fullRouteLinePoints.length - 1; i += 1) {
+        const nextPoint = fullRouteLinePoints[i + 1];
+
+        if (!Array.isArray(nextPoint)) continue;
+
+        const segmentMeters = distanceMetersBetweenLngLat(previousPoint, nextPoint);
+
+        if (!Number.isFinite(segmentMeters) || segmentMeters <= 0) {
+          previousPoint = nextPoint;
+          continue;
+        }
+
+        if (segmentMeters >= remainingMeters) {
+          const t = Math.max(0, Math.min(1, remainingMeters / segmentMeters));
+
+          return [
+            previousPoint[0] + (nextPoint[0] - previousPoint[0]) * t,
+            previousPoint[1] + (nextPoint[1] - previousPoint[1]) * t,
+          ];
+        }
+
+        remainingMeters -= segmentMeters;
+        previousPoint = nextPoint;
+      }
+
+      return fullRouteLinePoints[fullRouteLinePoints.length - 1];
+    }
+
     function routeBearingAtIndex(index, point) {
+      // Provider Lookahead Bearing v43
       if (!Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
         return smoothProviderBearing || 0;
       }
 
       const safeIndex = Math.max(
         0,
-        Math.min(Number(index) || 0, fullRouteLinePoints.length - 2),
+        Math.min(Number(index) || 0, fullRouteLinePoints.length - 2)
       );
 
-      const currentPoint = point || fullRouteLinePoints[safeIndex];
+      const currentPoint = Array.isArray(point)
+        ? point
+        : fullRouteLinePoints[safeIndex];
+
+      const lookaheadPoint = routeLookaheadPointFromIndex(
+        safeIndex,
+        currentPoint,
+        38
+      );
+
+      if (Array.isArray(currentPoint) && Array.isArray(lookaheadPoint)) {
+        const distanceToLookahead = distanceMetersBetweenLngLat(
+          currentPoint,
+          lookaheadPoint
+        );
+
+        if (Number.isFinite(distanceToLookahead) && distanceToLookahead >= 2) {
+          return bearingBetweenLngLat(currentPoint, lookaheadPoint);
+        }
+      }
+
       const nextPoint = fullRouteLinePoints[safeIndex + 1];
 
-      if (currentPoint && nextPoint) {
+      if (Array.isArray(currentPoint) && Array.isArray(nextPoint)) {
         return bearingBetweenLngLat(currentPoint, nextPoint);
       }
 
@@ -1484,6 +1553,7 @@
 
       return bearingBetweenLngLat(previousPoint, fallbackPoint);
     }
+
 
     function projectPointToRouteSegment(px, py, ax, ay, bx, by) {
       const dx = bx - ax;
