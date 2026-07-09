@@ -2480,10 +2480,17 @@
     }
 
     function remainingRouteFromProvider(lng, lat) {
-      // Provider Remaining Route v46
-      // Always render the remaining route from the visual snapped provider point.
-      // Do not jump the route start to a future polyline point, because that creates a red-line cut/kink.
+      // Provider Remaining Route v47
+      // Keep route trimming tied to stable monotonic progress.
+      // The red route can start from the visual provider point, but it cannot suddenly jump
+      // to a nearby parallel road/ramp segment.
       if (!map || !Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return null;
+      }
+
+      const visualPoint = [Number(lng), Number(lat)];
+
+      if (!Number.isFinite(visualPoint[0]) || !Number.isFinite(visualPoint[1])) {
         return null;
       }
 
@@ -2491,20 +2498,43 @@
 
       if (!snap) return null;
 
-      const snapIndex = Math.max(
+      const maxRouteIndex = fullRouteLinePoints.length - 2;
+      const previousIndex = Math.max(
         0,
-        Math.min(Number(snap.index) || 0, fullRouteLinePoints.length - 2)
+        Math.min(Number(routeProgressLastIndex) || 0, maxRouteIndex)
       );
 
-      const startPoint = Array.isArray(snap.point)
-        ? snap.point
-        : fullRouteLinePoints[snapIndex];
+      const snapIndex = Math.max(
+        0,
+        Math.min(Number(snap.index) || 0, maxRouteIndex)
+      );
 
-      if (!Array.isArray(startPoint)) return null;
+      const forwardJump = snapIndex - previousIndex;
+      const currentBearing = Number(smoothProviderBearing);
+      const snapBearing = Number(snap.bearing);
+      const bearingDiff =
+        Number.isFinite(currentBearing) && Number.isFinite(snapBearing)
+          ? bearingDifferenceDegrees(currentBearing, snapBearing)
+          : 0;
 
-      routeProgressLastIndex = Math.max(routeProgressLastIndex, snapIndex);
+      const suspiciousJump =
+        forwardJump > 4 ||
+        (forwardJump > 1 && bearingDiff > 65);
 
-      const nextPoint = fullRouteLinePoints[snapIndex + 1];
+      const acceptedIndex =
+        snapIndex < previousIndex || suspiciousJump
+          ? previousIndex
+          : snapIndex;
+
+      routeProgressLastIndex = Math.max(previousIndex, acceptedIndex);
+
+      const routeIndex = routeProgressLastIndex;
+      const startPoint =
+        acceptedIndex === snapIndex && Array.isArray(snap.point)
+          ? snap.point
+          : visualPoint;
+
+      const nextPoint = fullRouteLinePoints[routeIndex + 1];
       const remaining = [startPoint];
 
       if (Array.isArray(nextPoint)) {
@@ -2515,7 +2545,7 @@
         }
       }
 
-      remaining.push(...fullRouteLinePoints.slice(snapIndex + 2));
+      remaining.push(...fullRouteLinePoints.slice(routeIndex + 2));
 
       const cleanRemaining = remaining.filter(Boolean);
 
@@ -2738,7 +2768,7 @@
       lastAcceptedGpsAt = now;
 
       updateGpsNavigationMeter(snapped[0], snapped[1], snapped[2]);
-      // Provider Remaining Route v46
+      // Provider Remaining Route v47
       // Route progress is updated from the animated visual marker, not the raw target.
       alignInitialCameraToProvider(snapped[0], snapped[1], snapped[2]);
       animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
