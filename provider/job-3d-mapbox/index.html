@@ -695,8 +695,18 @@
     let currentToken = "";
     let exactLat = null;
     let exactLng = null;
+    const mapboxTokenUrl = new URL(window.location.href);
+    const shouldResetMapboxToken =
+      mapboxTokenUrl.searchParams.get("reset_mapbox_token") === "1";
+
+    if (shouldResetMapboxToken) {
+      localStorage.removeItem("GIGCHAT_MAPBOX_PUBLIC_TOKEN");
+    }
+
     const storedMapboxToken = localStorage.getItem("GIGCHAT_MAPBOX_PUBLIC_TOKEN");
-    const promptedMapboxToken = storedMapboxToken || window.prompt("Paste Mapbox public token for this browser");
+    const promptedMapboxToken =
+      storedMapboxToken || window.prompt("Paste Mapbox public token for this browser");
+
     mapboxgl.accessToken = promptedMapboxToken || "";
 
     if (promptedMapboxToken) {
@@ -1328,6 +1338,20 @@
         attributionControl: false,
         pitchWithRotate: true,
         dragRotate: true,
+      });
+
+      map.on("error", (event) => {
+        const message =
+          event && event.error && event.error.message
+            ? event.error.message
+            : String(event && event.error ? event.error : "");
+
+        if (/token|401|403|forbidden|unauthorized/i.test(message)) {
+          localStorage.removeItem("GIGCHAT_MAPBOX_PUBLIC_TOKEN");
+          setStatus("Mapbox token rejected. Reopen with reset_mapbox_token=1.");
+          turnMainEl.textContent = "Mapbox token issue";
+          turnSubEl.textContent = "Refresh and paste a valid public token";
+        }
       });
 
       map.on("load", () => {
