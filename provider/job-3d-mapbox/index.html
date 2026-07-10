@@ -1407,6 +1407,84 @@
       });
     }
 
+    function addGigChatLiveTraffic() {
+      // Mapbox Live Traffic v61
+      // Persistent real-time congestion layer below the navigation route.
+      if (!map || !map.getStyle || !map.getStyle()) return false;
+
+      if (!map.getSource("gigchat-live-traffic")) {
+        map.addSource("gigchat-live-traffic", {
+          type: "vector",
+          url: "mapbox://mapbox.mapbox-traffic-v1",
+        });
+      }
+
+      if (map.getLayer("gigchat-live-traffic-lines")) {
+        return true;
+      }
+
+      const styleLayers = map.getStyle().layers || [];
+
+      const firstSymbolLayer = styleLayers.find((layer) => {
+        return (
+          layer &&
+          layer.type === "symbol" &&
+          layer.layout &&
+          layer.layout["text-field"]
+        );
+      });
+
+      const beforeLayerId = firstSymbolLayer
+        ? firstSymbolLayer.id
+        : undefined;
+
+      map.addLayer(
+        {
+          id: "gigchat-live-traffic-lines",
+          type: "line",
+          source: "gigchat-live-traffic",
+          "source-layer": "traffic",
+          minzoom: 7,
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+          },
+          paint: {
+            "line-color": [
+              "match",
+              ["get", "congestion"],
+              "low", "#27e879",
+              "moderate", "#ffd43b",
+              "heavy", "#ff8a1f",
+              "severe", "#ff334f",
+              "unknown", "rgba(120, 150, 170, 0.35)",
+              "rgba(120, 150, 170, 0.25)"
+            ],
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7, 1.2,
+              12, 2.4,
+              16, 4.2,
+              19, 7
+            ],
+            "line-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7, 0.50,
+              12, 0.70,
+              16, 0.86
+            ]
+          },
+        },
+        beforeLayerId
+      );
+
+      return true;
+    }
+
     function addGigChat3DBuildings() {
       // Mapbox 3D Buildings v55 - smoother mobile rendering
       // Adds low/high building extrusions without touching provider arrow, camera, or route logic.
@@ -1523,6 +1601,7 @@
 
       map.on("load", () => {
         tuneGigChatVectorMapStyle();
+        addGigChatLiveTraffic();
         addGigChat3DBuildings();
         map.addSource("route", {
           type: "geojson",
