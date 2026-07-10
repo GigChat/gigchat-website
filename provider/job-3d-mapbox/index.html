@@ -1096,7 +1096,9 @@
 
 
     function updateEtaUI(data) {
-      setNavigationRouteStepsFromEta(data);
+      // Mapbox Test v50: do not use legacy backend route_steps yet.
+        navigationRouteSteps = [];
+        navigationRouteStepsSignature = "";
       const minutes = data && data.eta_minutes ? Number(data.eta_minutes) : null;
       const distance = data && data.eta_distance_meters ? Number(data.eta_distance_meters) : null;
 
@@ -2853,21 +2855,29 @@
     }
 
     function providerSimulatorPositionFromRouteDistance(points, metrics, meters) {
-      // Provider Route Simulator v41
+      // Provider Route Simulator v50
       const point = providerSimulatorPointAtDistance(points, metrics, meters);
+
+      if (
+        !Array.isArray(point) ||
+        !Number.isFinite(Number(point[0])) ||
+        !Number.isFinite(Number(point[1]))
+      ) {
+        return null;
+      }
 
       return providerSimulatorPositionFromCoords({
         latitude: point[1],
         longitude: point[0],
         accuracy: 8,
         speed: 13.4,
-        heading: point[2],
+        heading: Number.isFinite(Number(point[2])) ? point[2] : 0,
       });
     }
 
     function handleProviderSimulatorPosition(position) {
       // Provider Route Simulator v41
-      const coords = position.coords || {};
+      const coords = position && position.coords ? position.coords : {};
 
       if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
         return;
@@ -2915,7 +2925,9 @@
         );
 
         updateEtaUI(eta);
-        setNavigationRouteStepsFromEta(eta);
+        // Mapbox Test v50: do not use legacy backend route_steps yet.
+        navigationRouteSteps = [];
+        navigationRouteStepsSignature = "";
 
         const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
 
@@ -2928,7 +2940,7 @@
           return;
         }
 
-        const simulatorRoutePoints = fullRouteLinePoints.slice();
+        const simulatorRoutePoints = fullRouteLinePoints.filter((point) => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
         const metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
 
         if (!Number.isFinite(metrics.totalMeters) || metrics.totalMeters < 10) {
@@ -2988,7 +3000,7 @@
     }
 
     async function sendProviderLocationPing(position) {
-      const coords = position.coords || {};
+      const coords = position && position.coords ? position.coords : {};
 
       const res = await fetch(API_BASE + "?task=provider_location_ping", {
         method: "POST",
@@ -3013,7 +3025,7 @@
     }
 
     async function handlePosition(position, forcePing) {
-      const coords = position.coords || {};
+      const coords = position && position.coords ? position.coords : {};
 
       if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
         throw new Error("Invalid provider location.");
