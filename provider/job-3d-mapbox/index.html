@@ -3010,7 +3010,51 @@
         window.__gigchatProviderRouteSimulatorTimer = null;
       }
 
-      const fakeStart = buildProviderSimulatorStartPoint(exactLng, exactLat);
+      let fakeStart = buildProviderSimulatorStartPoint(exactLng, exactLat);
+
+      if (isProviderSimulatorEnabled()) {
+        const simulatorUrl = new URL(window.location.href);
+        const useCurrentLocationAsSimulatorStart =
+          simulatorUrl.searchParams.get("sim_from_current") === "1";
+
+        if (useCurrentLocationAsSimulatorStart) {
+          try {
+            setStatus("Simulator getting your current location...");
+            const currentPosition = await getProviderPosition();
+            const currentCoords =
+              currentPosition && currentPosition.coords ? currentPosition.coords : {};
+
+            const currentLat = Number(currentCoords.latitude);
+            const currentLng = Number(currentCoords.longitude);
+
+            if (
+              Number.isFinite(currentLat) &&
+              Number.isFinite(currentLng) &&
+              currentLng >= -180 &&
+              currentLng <= 180 &&
+              currentLat >= -85.051129 &&
+              currentLat <= 85.051129
+            ) {
+              fakeStart = {
+                latitude: currentLat,
+                longitude: currentLng,
+                accuracy: Number.isFinite(Number(currentCoords.accuracy))
+                  ? Number(currentCoords.accuracy)
+                  : 8,
+                speed: 13.4,
+                heading: Number.isFinite(Number(currentCoords.heading))
+                  ? Number(currentCoords.heading)
+                  : 0,
+              };
+
+              setStatus("Simulator using your current location as start.");
+            }
+          } catch (err) {
+            console.warn("SIMULATOR CURRENT LOCATION FAILED:", err);
+            setStatus("Simulator could not use current location; using test start.");
+          }
+        }
+      }
 
       if (!fakeStart) {
         setStatus("Simulator failed: missing map coordinates.");
