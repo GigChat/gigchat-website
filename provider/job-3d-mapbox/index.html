@@ -2954,24 +2954,46 @@
     }
 
     function handleProviderSimulatorPosition(position) {
-      // Provider Route Simulator v41
+      // Mapbox Simulator Direct v52
+      // The simulator already follows the route geometry by distance.
+      // Do not send simulator coordinates through the legacy snap/updateProviderCamera pipeline,
+      // because Mapbox rejects any bad LngLat with Invalid LngLat object: (NaN, NaN).
       const coords = position && position.coords ? position.coords : {};
 
-      const simulatorPoint = cleanMapboxLngLatPoint([
-        coords.longitude,
-        coords.latitude,
-      ]);
+      const lat = Number(coords.latitude);
+      const lng = Number(coords.longitude);
 
-      if (!simulatorPoint) {
+      if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        lng < -180 ||
+        lng > 180 ||
+        lat < -85.051129 ||
+        lat > 85.051129
+      ) {
         return;
       }
 
-      coords.longitude = simulatorPoint[0];
-      coords.latitude = simulatorPoint[1];
+      const rawBearing = Number(coords.heading);
+      const bearing = Number.isFinite(rawBearing)
+        ? normalizeProviderBearing(rawBearing)
+        : normalizeProviderBearing(Number(smoothProviderBearing) || 0);
+
+      coords.latitude = lat;
+      coords.longitude = lng;
+      coords.heading = bearing;
 
       updateProviderSpeedDebug(coords);
       updateLiveHeadingFromCoords(coords);
-      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+
+      lastProviderPoint = [lng, lat, bearing];
+      smoothProviderPoint = [lng, lat, bearing];
+      smoothProviderBearing = bearing;
+
+      setProviderMarker(lng, lat, bearing);
+      updateGpsNavigationMeter(lng, lat, bearing);
+      alignInitialCameraToProvider(lng, lat, bearing);
+      smoothCameraToProvider(lng, lat, bearing);
     }
 
     async function startProviderRouteSimulator() {
