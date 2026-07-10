@@ -1450,6 +1450,17 @@
             "line-join": "round",
           },
           paint: {
+            // Mapbox Side Traffic Offset v64
+            // Keep congestion visible beside the centered navigation route.
+            "line-offset": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7, 0.5,
+              12, 1.5,
+              16, 3.5,
+              19, 5.5
+            ],
             "line-color": [
               "match",
               ["get", "congestion"],
