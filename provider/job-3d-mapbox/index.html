@@ -1458,9 +1458,9 @@
             "line-join": "round",
           },
           paint: {
-            "line-color": "#ffb3bd",
+            "line-color": "#b6ff00",
             "line-width": 18,
-            "line-opacity": 0.46,
+            "line-opacity": 0.42,
           },
         });
 
@@ -1473,9 +1473,9 @@
             "line-join": "round",
           },
           paint: {
-            "line-color": "#ff405f",
+            "line-color": "#39ff14",
             "line-width": 9,
-            "line-opacity": 0.95,
+            "line-opacity": 0.98,
           },
         });
 
@@ -3041,6 +3041,55 @@
       });
     }
 
+    function updateProviderSimulatorRemainingRoute(points, metrics, meters) {
+      // Provider Route Progress v56
+      // In simulator mode, erase the route behind the provider.
+      // The route should begin at the current visual provider point and continue forward only.
+      if (!map || !map.getSource || !metrics) return;
+
+      const source = map.getSource("route");
+      if (!source || typeof source.setData !== "function") return;
+
+      const cleanPoints = sanitizeMapboxLngLatPoints(points);
+
+      if (!Array.isArray(cleanPoints) || cleanPoints.length < 2) return;
+      if (!Array.isArray(metrics.cumulative) || metrics.cumulative.length < 2) return;
+      if (!Number.isFinite(Number(metrics.totalMeters)) || metrics.totalMeters <= 0) return;
+
+      const targetMeters = Math.max(
+        0,
+        Math.min(Number(meters) || 0, Number(metrics.totalMeters))
+      );
+
+      let index = 0;
+
+      while (
+        index < metrics.cumulative.length - 2 &&
+        metrics.cumulative[index + 1] < targetMeters
+      ) {
+        index += 1;
+      }
+
+      const currentPoint = providerSimulatorPointAtDistance(
+        cleanPoints,
+        metrics,
+        targetMeters
+      );
+
+      const startPoint = cleanMapboxLngLatPoint(currentPoint);
+
+      if (!startPoint) return;
+
+      const remaining = [
+        startPoint,
+        ...cleanPoints.slice(index + 1),
+      ].filter(Boolean);
+
+      if (remaining.length >= 2) {
+        source.setData(routeGeoJson(remaining));
+      }
+    }
+
     function handleProviderSimulatorPosition(position) {
       // Mapbox Simulator Direct v52
       // The simulator already follows the route geometry by distance.
@@ -3205,6 +3254,12 @@
         turnSubEl.textContent = "Distance-based fake GPS through live pipeline";
 
         const tick = () => {
+          updateProviderSimulatorRemainingRoute(
+            simulatorRoutePoints,
+            metrics,
+            traveledMeters
+          );
+
           handleProviderSimulatorPosition(
             providerSimulatorPositionFromRouteDistance(
               simulatorRoutePoints,
@@ -3216,6 +3271,12 @@
           traveledMeters += metersPerTick;
 
           if (traveledMeters >= metrics.totalMeters) {
+            updateProviderSimulatorRemainingRoute(
+              simulatorRoutePoints,
+              metrics,
+              metrics.totalMeters
+            );
+
             handleProviderSimulatorPosition(
               providerSimulatorPositionFromRouteDistance(
                 simulatorRoutePoints,
