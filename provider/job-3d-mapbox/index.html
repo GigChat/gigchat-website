@@ -39,6 +39,58 @@
       background: #f6f1ff;
     }
 
+    .traffic-route-indicator {
+      position: absolute;
+      top: 118px;
+      right: 14px;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 0 11px;
+      border: 1px solid rgba(57, 255, 20, 0.42);
+      border-radius: 999px;
+      background: rgba(7, 15, 12, 0.82);
+      color: #9dff87;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.28),
+        0 0 14px rgba(57, 255, 20, 0.12);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      pointer-events: none;
+    }
+
+    .traffic-route-indicator::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      flex: 0 0 7px;
+      border-radius: 50%;
+      background: #39ff14;
+      box-shadow: 0 0 9px rgba(57, 255, 20, 0.9);
+    }
+
+    .traffic-route-indicator.checking::before {
+      animation: trafficRoutePulse 0.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes trafficRoutePulse {
+      from {
+        opacity: 0.35;
+        transform: scale(0.75);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1.18);
+      }
+    }
+
     #map {
       position: absolute;
       inset: 0;
@@ -615,6 +667,9 @@
 <body>
   <main class="screen">
     <div id="map"></div>
+    <div id="trafficRouteIndicator" class="traffic-route-indicator">
+      Traffic route active
+    </div>
     <div class="map-veil"></div>
 
     <div class="top-pill">
@@ -674,6 +729,8 @@
 
     const navBtn = document.getElementById("navBtn");
     const navStatusEl = document.getElementById("navStatus");
+    const trafficRouteIndicatorEl =
+      document.getElementById("trafficRouteIndicator");
     const errorEl = document.getElementById("error");
     const etaChipEl = document.getElementById("etaChip");
     const etaMainEl = document.getElementById("etaMain");
@@ -792,6 +849,19 @@
 
       const parts = window.location.pathname.split("/").filter(Boolean);
       return parts[parts.length - 1] || "";
+    }
+
+    function setTrafficRouteIndicator(message, checking = false) {
+      // Traffic Route Indicator v59
+      if (!trafficRouteIndicatorEl) return;
+
+      trafficRouteIndicatorEl.textContent =
+        String(message || "Traffic route active");
+
+      trafficRouteIndicatorEl.classList.toggle(
+        "checking",
+        Boolean(checking)
+      );
     }
 
     function isProviderSimulatorEnabled() {
@@ -3275,12 +3345,12 @@
           if (!currentPosition || !currentPosition.coords) return;
 
           try {
-            turnSubEl.textContent = "Checking fastest route with traffic...";
+            setTrafficRouteIndicator("Checking traffic...", true);
 
             const freshEta = await sendProviderLocationPing(currentPosition);
 
             if (!freshEta || !freshEta.encoded_polyline) {
-              turnSubEl.textContent = "Fastest route still active";
+              setTrafficRouteIndicator("Fastest route active");
               return;
             }
 
@@ -3293,7 +3363,7 @@
               !Array.isArray(fullRouteLinePoints) ||
               fullRouteLinePoints.length < 2
             ) {
-              turnSubEl.textContent = "Fastest route still active";
+              setTrafficRouteIndicator("Fastest route active");
               return;
             }
 
@@ -3306,7 +3376,7 @@
               !Number.isFinite(nextMetrics.totalMeters) ||
               nextMetrics.totalMeters < 10
             ) {
-              turnSubEl.textContent = "Fastest route still active";
+              setTrafficRouteIndicator("Fastest route active");
               return;
             }
 
@@ -3322,10 +3392,10 @@
               traveledMeters
             );
 
-            turnSubEl.textContent = "Fastest route updated with traffic";
+            setTrafficRouteIndicator("Route updated");
           } catch (err) {
             console.warn("MAPBOX REROUTE WATCHDOG FAILED:", err);
-            turnSubEl.textContent = "Fastest route still active";
+            setTrafficRouteIndicator("Fastest route active");
           }
         };
 
