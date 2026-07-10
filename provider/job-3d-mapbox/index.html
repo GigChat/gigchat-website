@@ -1464,18 +1464,18 @@
               "interpolate",
               ["linear"],
               ["zoom"],
-              7, 1.2,
-              12, 2.4,
-              16, 4.2,
-              19, 7
+              7, 1.5,
+              12, 3.2,
+              16, 6.5,
+              19, 11
             ],
             "line-opacity": [
               "interpolate",
               ["linear"],
               ["zoom"],
-              7, 0.50,
-              12, 0.70,
-              16, 0.86
+              7, 0.58,
+              12, 0.80,
+              16, 0.96
             ]
           },
         },
@@ -1618,8 +1618,8 @@
           },
           paint: {
             "line-color": "#b6ff00",
-            "line-width": 18,
-            "line-opacity": 0.42,
+            "line-width": 12,
+            "line-opacity": 0.30,
           },
         });
 
@@ -1633,8 +1633,8 @@
           },
           paint: {
             "line-color": "#39ff14",
-            "line-width": 9,
-            "line-opacity": 0.98,
+            "line-width": 6,
+            "line-opacity": 0.94,
           },
         });
 
@@ -2384,22 +2384,41 @@
     }
 
     function chooseProviderBearing(routeBearing) {
-      // Provider Arrow Bearing v42
-      // Smooth route bearing through turns/intersections while still trusting the route.
+      // Provider Immediate Route Bearing v62
+      // When stopped or moving very slowly, align immediately with the road ahead.
+      // While driving, retain smooth rotation through curves and intersections.
       const route = normalizeProviderBearing(routeBearing);
+      const currentSpeedMph = Number(smoothedSpeedMph);
 
-      if (!smoothProviderPoint || !Number.isFinite(Number(smoothProviderBearing))) {
+      if (
+        !smoothProviderPoint ||
+        !Number.isFinite(Number(smoothProviderBearing))
+      ) {
         return route;
       }
 
-      const current = normalizeProviderBearing(Number(smoothProviderBearing));
-      const diff = bearingDifferenceDegrees(current, route);
-
-      if (diff < 4) {
-        return current;
+      if (
+        !Number.isFinite(currentSpeedMph) ||
+        currentSpeedMph < PROVIDER_HEADING_MIN_SPEED_MPH
+      ) {
+        return route;
       }
 
-      const factor = diff >= 85 ? 0.62 : diff >= 35 ? 0.48 : 0.34;
+      const current =
+        normalizeProviderBearing(Number(smoothProviderBearing));
+
+      const diff =
+        bearingDifferenceDegrees(current, route);
+
+      if (diff < 4) {
+        return route;
+      }
+
+      const factor =
+        diff >= 85 ? 0.62 :
+        diff >= 35 ? 0.48 :
+        0.34;
+
       return lerpBearing(current, route, factor);
     }
 
