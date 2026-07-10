@@ -829,6 +829,15 @@
     const ROUTE_PROGRESS_UPDATE_INTERVAL_MS = 120;
     const MAPBOX_REROUTE_WATCHDOG_INTERVAL_MS = 75000;
 
+    // Provider Map Matching v60B
+    const PROVIDER_MAP_MATCH_INTERVAL_MS = 5000;
+    const PROVIDER_MAP_MATCH_MAX_POINTS = 8;
+    const PROVIDER_MAP_MATCH_MIN_CONFIDENCE = 0.15;
+
+    let providerMapMatchingPoints = [];
+    let providerLastMapMatchAt = 0;
+    let providerMapMatchingInFlight = false;
+
     // Smooth Provider Navigation v16
     // Marker Glide v36
     let smoothProviderPoint = null;
@@ -3448,6 +3457,187 @@
       }
     }
 
+    function addProviderMapMatchingPoint(position) {
+      // Provider Map Matching v60B
+      const coords =
+        position && position.coords ? position.coords : {};
+
+      const latitude = Number(coords.latitude);
+      const longitude = Number(coords.longitude);
+      const accuracy = Number(coords.accuracy);
+      const rawTimestamp = Number(position && position.timestamp);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180 ||
+        latitude < -85.051129 ||
+        latitude > 85.051129
+      ) {
+        return;
+      }
+
+      const timestampSeconds = Number.isFinite(rawTimestamp)
+        ? Math.max(0, Math.round(rawTimestamp / 1000))
+        : Math.round(Date.now() / 1000);
+
+      const nextPoint = {
+        latitude,
+        longitude,
+        accuracy: Number.isFinite(accuracy)
+          ? Math.max(5, Math.min(100, accuracy))
+          : 30,
+        timestamp: timestampSeconds,
+      };
+
+      const previous =
+        providerMapMatchingPoints[
+          providerMapMatchingPoints.length - 1
+        ];
+
+      if (
+        previous &&
+        previous.latitude === nextPoint.latitude &&
+        previous.longitude === nextPoint.longitude &&
+        previous.timestamp === nextPoint.timestamp
+      ) {
+        return;
+      }
+
+      providerMapMatchingPoints.push(nextPoint);
+
+      if (
+        providerMapMatchingPoints.length >
+        PROVIDER_MAP_MATCH_MAX_POINTS
+      ) {
+        providerMapMatchingPoints =
+          providerMapMatchingPoints.slice(
+            -PROVIDER_MAP_MATCH_MAX_POINTS
+          );
+      }
+    }
+
+    function buildProviderMatchedPosition(
+      originalPosition,
+      matchedLatitude,
+      matchedLongitude
+    ) {
+      const originalCoords =
+        originalPosition && originalPosition.coords
+          ? originalPosition.coords
+          : {};
+
+      return {
+        timestamp:
+          Number(originalPosition && originalPosition.timestamp) ||
+          Date.now(),
+        coords: {
+          latitude: Number(matchedLatitude),
+          longitude: Number(matchedLongitude),
+          accuracy: Number.isFinite(Number(originalCoords.accuracy))
+            ? Number(originalCoords.accuracy)
+            : 15,
+          altitude: originalCoords.altitude ?? null,
+          altitudeAccuracy:
+            originalCoords.altitudeAccuracy ?? null,
+          heading: originalCoords.heading ?? null,
+          speed: originalCoords.speed ?? null,
+        },
+      };
+    }
+
+    async function getProviderMapMatchedPosition(position) {
+      // Provider Map Matching v60B
+      // Simulator already follows route geometry and must remain untouched.
+      if (isProviderSimulatorEnabled()) {
+        return position;
+      }
+
+      addProviderMapMatchingPoint(position);
+
+      if (providerMapMatchingPoints.length < 2) {
+        return position;
+      }
+
+      const now = Date.now();
+
+      if (
+        providerMapMatchingInFlight ||
+        now - providerLastMapMatchAt <
+          PROVIDER_MAP_MATCH_INTERVAL_MS
+      ) {
+        return position;
+      }
+
+      providerLastMapMatchAt = now;
+      providerMapMatchingInFlight = true;
+
+      try {
+        const res = await fetch(
+          API_BASE + "?task=provider_map_matching",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token: currentToken,
+              points: providerMapMatchingPoints,
+            }),
+          }
+        );
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(
+            data.error || "Map matching request failed."
+          );
+        }
+
+        const matchedLatitude =
+          Number(data.matched_latitude);
+        const matchedLongitude =
+          Number(data.matched_longitude);
+        const confidence = Number(data.confidence);
+
+        if (
+          !Number.isFinite(matchedLatitude) ||
+          !Number.isFinite(matchedLongitude) ||
+          matchedLongitude < -180 ||
+          matchedLongitude > 180 ||
+          matchedLatitude < -85.051129 ||
+          matchedLatitude > 85.051129
+        ) {
+          return position;
+        }
+
+        if (
+          Number.isFinite(confidence) &&
+          confidence <
+            PROVIDER_MAP_MATCH_MIN_CONFIDENCE
+        ) {
+          return position;
+        }
+
+        return buildProviderMatchedPosition(
+          position,
+          matchedLatitude,
+          matchedLongitude
+        );
+      } catch (err) {
+        console.warn(
+          "PROVIDER MAP MATCHING FAILED:",
+          err
+        );
+
+        return position;
+      } finally {
+        providerMapMatchingInFlight = false;
+      }
+    }
+
     async function sendProviderLocationPing(position) {
       const coords = position && position.coords ? position.coords : {};
 
@@ -3474,34 +3664,72 @@
     }
 
     async function handlePosition(position, forcePing) {
-      const coords = position && position.coords ? position.coords : {};
+      const rawCoords =
+        position && position.coords ? position.coords : {};
 
-      if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
+      if (
+        !Number.isFinite(rawCoords.latitude) ||
+        !Number.isFinite(rawCoords.longitude)
+      ) {
         throw new Error("Invalid provider location.");
       }
 
-      updateProviderSpeedDebug(coords);
-          updateLiveHeadingFromCoords(coords);
-          updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+      // Speed and heading continue using the original phone GPS.
+      updateProviderSpeedDebug(rawCoords);
+      updateLiveHeadingFromCoords(rawCoords);
+
+      const navigationPosition =
+        await getProviderMapMatchedPosition(position);
+
+      const navigationCoords =
+        navigationPosition && navigationPosition.coords
+          ? navigationPosition.coords
+          : rawCoords;
+
+      // Arrow and camera receive the road-matched position.
+      updateProviderCamera(
+        navigationCoords.latitude,
+        navigationCoords.longitude,
+        navigationCoords.accuracy
+      );
 
       const now = Date.now();
-      const shouldPing = forcePing || now - lastPingAt >= 30000;
+      const shouldPing =
+        forcePing || now - lastPingAt >= 30000;
 
       if (!shouldPing) return;
 
       lastPingAt = now;
       setStatus("Updating live ETA...");
 
-      const eta = await sendProviderLocationPing(position);
+      // ETA and rerouting start from the road-matched position.
+      const eta = await sendProviderLocationPing(
+        navigationPosition
+      );
+
       updateEtaUI(eta);
 
-      const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
-      updateProviderSpeedDebug(coords);
-          updateLiveHeadingFromCoords(coords);
-          updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+      const routeLoaded = drawEncodedRoute(
+        eta && eta.encoded_polyline
+      );
 
-      if (routeLoaded && eta && eta.customer_notified) {
-        setStatus("Route loaded. Customer notified.");
+      updateProviderSpeedDebug(rawCoords);
+      updateLiveHeadingFromCoords(rawCoords);
+
+      updateProviderCamera(
+        navigationCoords.latitude,
+        navigationCoords.longitude,
+        navigationCoords.accuracy
+      );
+
+      if (
+        routeLoaded &&
+        eta &&
+        eta.customer_notified
+      ) {
+        setStatus(
+          "Route loaded. Customer notified."
+        );
       } else if (routeLoaded) {
         setStatus("Route loaded.");
       } else {
