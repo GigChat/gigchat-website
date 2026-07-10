@@ -770,6 +770,7 @@
     let routeProgressLastUpdateAt = 0;
 
     const ROUTE_PROGRESS_UPDATE_INTERVAL_MS = 120;
+    const MAPBOX_REROUTE_WATCHDOG_INTERVAL_MS = 75000;
 
     // Smooth Provider Navigation v16
     // Marker Glide v36
@@ -3229,8 +3230,8 @@
           return;
         }
 
-        const simulatorRoutePoints = sanitizeMapboxLngLatPoints(fullRouteLinePoints);
-        const metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
+        let simulatorRoutePoints = sanitizeMapboxLngLatPoints(fullRouteLinePoints);
+        let metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
 
         if (!Number.isFinite(metrics.totalMeters) || metrics.totalMeters < 10) {
           setStatus("Simulator failed: route is too short.");
@@ -3249,9 +3250,84 @@
         const metersPerTick = speedMetersPerSecond * (tickMs / 1000);
 
         let traveledMeters = 0;
+        let lastRerouteCheckAt = 0;
 
         setStatus("Simulator following route by distance. No GPS permission needed.");
         turnSubEl.textContent = "Distance-based fake GPS through live pipeline";
+
+        const checkMapboxReroute = async () => {
+          // Mapbox Reroute Watchdog v58
+          // Recalculate route from current provider position using backend Mapbox driving-traffic.
+          const now = Date.now();
+
+          if (now - lastRerouteCheckAt < MAPBOX_REROUTE_WATCHDOG_INTERVAL_MS) {
+            return;
+          }
+
+          lastRerouteCheckAt = now;
+
+          const currentPosition = providerSimulatorPositionFromRouteDistance(
+            simulatorRoutePoints,
+            metrics,
+            traveledMeters
+          );
+
+          if (!currentPosition || !currentPosition.coords) return;
+
+          try {
+            turnSubEl.textContent = "Checking fastest route with traffic...";
+
+            const freshEta = await sendProviderLocationPing(currentPosition);
+
+            if (!freshEta || !freshEta.encoded_polyline) {
+              turnSubEl.textContent = "Fastest route still active";
+              return;
+            }
+
+            updateEtaUI(freshEta);
+
+            const routeLoaded = drawEncodedRoute(freshEta.encoded_polyline);
+
+            if (
+              !routeLoaded ||
+              !Array.isArray(fullRouteLinePoints) ||
+              fullRouteLinePoints.length < 2
+            ) {
+              turnSubEl.textContent = "Fastest route still active";
+              return;
+            }
+
+            const nextRoutePoints = sanitizeMapboxLngLatPoints(fullRouteLinePoints);
+            const nextMetrics = buildProviderSimulatorRouteMetrics(nextRoutePoints);
+
+            if (
+              !Array.isArray(nextRoutePoints) ||
+              nextRoutePoints.length < 2 ||
+              !Number.isFinite(nextMetrics.totalMeters) ||
+              nextMetrics.totalMeters < 10
+            ) {
+              turnSubEl.textContent = "Fastest route still active";
+              return;
+            }
+
+            simulatorRoutePoints = nextRoutePoints;
+            metrics = nextMetrics;
+            traveledMeters = 0;
+            routeProgressLastIndex = 0;
+            routeProgressLastUpdateAt = 0;
+
+            updateProviderSimulatorRemainingRoute(
+              simulatorRoutePoints,
+              metrics,
+              traveledMeters
+            );
+
+            turnSubEl.textContent = "Fastest route updated with traffic";
+          } catch (err) {
+            console.warn("MAPBOX REROUTE WATCHDOG FAILED:", err);
+            turnSubEl.textContent = "Fastest route still active";
+          }
+        };
 
         const tick = () => {
           updateProviderSimulatorRemainingRoute(
@@ -3259,6 +3335,8 @@
             metrics,
             traveledMeters
           );
+
+          checkMapboxReroute();
 
           handleProviderSimulatorPosition(
             providerSimulatorPositionFromRouteDistance(
