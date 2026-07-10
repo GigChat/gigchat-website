@@ -1,0 +1,3172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>GigChat Navigation</title>
+
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet" />
+
+  <style>
+    :root {
+      --ink: #171327;
+      --muted: rgba(45, 35, 78, 0.62);
+      --violet: #7c3cff;
+      --pink: #ff4f9a;
+      --shadow: 0 18px 50px rgba(89, 55, 180, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: #f6f1ff;
+      color: var(--ink);
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: #f6f1ff;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .map-veil {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,0.02), rgba(238,226,255,0.34)),
+        linear-gradient(180deg, rgba(250,247,255,0.06), rgba(246,240,255,0.35));
+    }
+
+    .top-pill {
+      position: absolute;
+      top: calc(18px + env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.86);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      font-size: 15px;
+      font-weight: 850;
+    }
+
+    .g-mark {
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-weight: 950;
+      background: linear-gradient(135deg, var(--pink), var(--violet));
+    }
+
+    .turn-card {
+      position: absolute;
+      top: calc(82px + env(safe-area-inset-top));
+      left: 18px;
+      right: 18px;
+      z-index: 20;
+      min-height: 86px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.9);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+    }
+
+    .turn-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: var(--violet);
+      background: rgba(124,60,255,0.08);
+      font-size: 30px;
+      font-weight: 950;
+      flex: 0 0 auto;
+    }
+
+    .turn-main {
+      font-size: 22px;
+      font-weight: 950;
+      line-height: 1.08;
+    }
+
+    .turn-sub {
+      margin-top: 6px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .provider-arrow {
+      position: absolute;
+      left: 50%;
+      bottom: calc(245px + env(safe-area-inset-bottom));
+      z-index: 18;
+      width: 78px;
+      height: 78px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      filter: drop-shadow(0 18px 24px rgba(124,60,255,0.28));
+    }
+
+    .provider-arrow::before {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      background: linear-gradient(135deg, #22e0ff, #7c3cff);
+      clip-path: polygon(50% 0%, 92% 92%, 50% 72%, 8% 92%);
+    }
+
+    .provider-arrow::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 48%;
+      width: 82px;
+      height: 42px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: rgba(124,60,255,0.16);
+      z-index: -1;
+    }
+
+    .eta-chip {
+      position: absolute;
+      left: 18px;
+      bottom: calc(220px + env(safe-area-inset-bottom));
+      z-index: 20;
+      min-width: 105px;
+      padding: 14px 16px;
+      border-radius: 999px;
+      background: rgba(18,18,24,0.9);
+      color: white;
+      box-shadow: 0 18px 38px rgba(18,18,24,0.24);
+      backdrop-filter: blur(16px);
+      font-weight: 950;
+      text-align: center;
+    }
+
+    .eta-chip span {
+      display: block;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .eta-chip small {
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.68);
+      font-weight: 750;
+    }
+
+    .recenter {
+      position: absolute;
+      right: 18px;
+      bottom: calc(220px + env(safe-area-inset-bottom));
+      z-index: 20;
+      width: 58px;
+      height: 58px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: var(--violet);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      font-size: 28px;
+      font-weight: 950;
+    }
+
+    .bottom-sheet {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: calc(14px + env(safe-area-inset-bottom));
+      z-index: 20;
+      border-radius: 28px;
+      padding: 16px;
+      background: rgba(255,255,255,0.92);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(24px);
+    }
+
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 28px;
+      line-height: 1;
+      color: var(--violet);
+      font-weight: 950;
+      letter-spacing: -0.03em;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .start-btn {
+      width: 100%;
+      border: 0;
+      border-radius: 22px;
+      padding: 18px 16px;
+      color: white;
+      background: linear-gradient(135deg, var(--pink) 0%, var(--violet) 72%);
+      box-shadow: 0 18px 36px rgba(124,60,255,0.24);
+      font-size: 16px;
+      font-weight: 950;
+    }
+
+    .start-btn:disabled {
+      opacity: 0.62;
+    }
+
+    .status {
+      margin-top: 12px;
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .error {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: calc(26px + env(safe-area-inset-bottom));
+      z-index: 40;
+      display: none;
+      padding: 16px;
+      border-radius: 18px;
+      color: #9d174d;
+      background: rgba(255,255,255,0.94);
+      box-shadow: var(--shadow);
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .mapboxgl-ctrl-bottom-left,
+    .mapboxgl-ctrl-bottom-right {
+      display: none;
+    }
+
+    /* GigChat 3D navigation dark mode v2 */
+    body,
+    .screen {
+      background: #0b1220;
+      color: #ffffff;
+    }
+
+    .map-veil {
+      background:
+        linear-gradient(180deg, rgba(9, 14, 24, 0.08), rgba(9, 14, 24, 0.18)),
+        radial-gradient(circle at 50% 60%, rgba(124, 60, 255, 0.05), rgba(5, 9, 16, 0.24));
+    }
+
+    .top-pill,
+    .turn-card {
+      display: none;
+    }
+
+    .provider-arrow {
+      display: none;
+    }
+
+    .screen.live .provider-arrow {
+      display: block;
+    }
+
+    .bottom-sheet {
+      background: rgba(16, 22, 32, 0.94);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 55px rgba(0, 0, 0, 0.42);
+    }
+
+    .metric strong {
+      color: #ffffff;
+    }
+
+    .metric span,
+    .status {
+      color: rgba(255, 255, 255, 0.64);
+    }
+
+    .start-btn {
+      background: linear-gradient(135deg, #ff405f 0%, #ff7a59 100%);
+      box-shadow: 0 18px 36px rgba(255, 64, 95, 0.24);
+    }
+
+    .eta-chip {
+      background: rgba(8, 10, 15, 0.92);
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
+    }
+
+    .recenter {
+      background: rgba(20, 26, 36, 0.94);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+
+    /* Provider 3D marker v2 */
+    .provider-arrow {
+      display: none !important;
+    }
+
+    .nav-arrow-marker {
+      width: 78px;
+      height: 78px;
+      pointer-events: none;
+      filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.34));
+    }
+
+    .nav-arrow-marker::before {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      background: linear-gradient(135deg, #21dfff, #7c3cff);
+      clip-path: polygon(50% 0%, 92% 92%, 50% 72%, 8% 92%);
+    }
+
+    .nav-arrow-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 48%;
+      width: 82px;
+      height: 42px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: rgba(124, 60, 255, 0.18);
+      z-index: -1;
+    }
+
+
+    /* Provider 3D polish v3 */
+    .nav-arrow-marker {
+      filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.26));
+    }
+
+    .nav-arrow-marker::after {
+      left: 50%;
+      top: 58%;
+      width: 58px;
+      height: 58px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background:
+        radial-gradient(circle, rgba(124, 60, 255, 0.28) 0%, rgba(124, 60, 255, 0.16) 42%, rgba(124, 60, 255, 0) 72%);
+      z-index: -1;
+    }
+
+    .eta-chip {
+      background: rgba(16, 22, 32, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 55px rgba(0, 0, 0, 0.42);
+    }
+
+    .recenter {
+      display: grid;
+      place-items: center;
+      position: absolute;
+      font-size: 0;
+      line-height: 0;
+      overflow: hidden;
+    }
+
+    .recenter::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 24px;
+      height: 24px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.86);
+    }
+
+    .recenter::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 34px;
+      height: 34px;
+      transform: translate(-50%, -50%);
+      background:
+        linear-gradient(90deg, transparent 0 47%, rgba(255, 255, 255, 0.86) 47% 53%, transparent 53% 100%),
+        linear-gradient(0deg, transparent 0 47%, rgba(255, 255, 255, 0.86) 47% 53%, transparent 53% 100%);
+      opacity: 0.92;
+    }
+
+
+    /* Small 3D map readability tune */
+    .map-veil {
+      background:
+        linear-gradient(180deg, rgba(9, 14, 24, 0.04), rgba(9, 14, 24, 0.10)),
+        radial-gradient(circle at 50% 60%, rgba(124, 60, 255, 0.04), rgba(5, 9, 16, 0.14)) !important;
+    }
+
+
+    /* Dark readable map v10 */
+    .map-veil {
+      background:
+        linear-gradient(180deg, rgba(5, 9, 16, 0.02), rgba(5, 9, 16, 0.08)),
+        radial-gradient(circle at 50% 65%, rgba(124, 60, 255, 0.04), rgba(5, 9, 16, 0.08)) !important;
+    }
+
+
+    /* Vector dark map readable labels v11 */
+    .map-veil {
+      background:
+        linear-gradient(180deg, rgba(5, 9, 16, 0.00), rgba(5, 9, 16, 0.04)) !important;
+    }
+
+
+    /* Soften dark map black blocks v12 */
+
+
+    /* Red guide-color 3D provider arrow v14 */
+    .nav-arrow-marker {
+      width: 86px;
+      height: 86px;
+      pointer-events: none;
+      filter:
+        drop-shadow(0 10px 8px rgba(0, 0, 0, 0.34))
+        drop-shadow(0 0 20px rgba(255, 64, 95, 0.34));
+    }
+
+    .nav-arrow-marker::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 78px;
+      height: 78px;
+      transform: translate(-50%, -50%);
+      background: #ffffff;
+      clip-path: polygon(50% 3%, 91% 89%, 50% 71%, 9% 89%);
+      filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.28));
+      z-index: 2;
+    }
+
+    .nav-arrow-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 59px;
+      height: 59px;
+      transform: translate(-50%, -52%);
+      background:
+        linear-gradient(145deg, #ff7b8d 0%, #ff405f 48%, #e9284d 100%);
+      clip-path: polygon(50% 4%, 90% 88%, 50% 70%, 10% 88%);
+      box-shadow:
+        inset 0 4px 8px rgba(255, 255, 255, 0.42),
+        inset 0 -7px 11px rgba(130, 0, 25, 0.30),
+        0 0 16px rgba(255, 64, 95, 0.42);
+      z-index: 3;
+    }
+
+
+    /* GPS turn-by-turn banner v15 */
+    .gps-banner {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: calc(14px + env(safe-area-inset-top));
+      z-index: 30;
+      min-height: 92px;
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: 24px;
+      background: rgba(13, 18, 27, 0.94);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 22px 55px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+
+    .gps-icon {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 35% 25%, rgba(255,255,255,0.38), rgba(255,255,255,0) 34%),
+        linear-gradient(145deg, #ff7b8d 0%, #ff405f 48%, #e9284d 100%);
+      color: #ffffff;
+      font-size: 34px;
+      font-weight: 950;
+      line-height: 1;
+      box-shadow:
+        inset 0 4px 8px rgba(255, 255, 255, 0.30),
+        inset 0 -7px 11px rgba(130, 0, 25, 0.30),
+        0 0 18px rgba(255, 64, 95, 0.36);
+    }
+
+    .gps-copy {
+      min-width: 0;
+    }
+
+    .gps-distance {
+      font-size: 17px;
+      font-weight: 950;
+      color: #ff7b8d;
+      letter-spacing: 0.01em;
+      margin-bottom: 4px;
+    }
+
+    .gps-instruction {
+      font-size: 20px;
+      line-height: 1.08;
+      font-weight: 950;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .gps-sub {
+      margin-top: 5px;
+      font-size: 13px;
+      line-height: 1.18;
+      font-weight: 750;
+      color: rgba(255, 255, 255, 0.66);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .gps-banner.waiting .gps-icon {
+      background: rgba(255, 255, 255, 0.10);
+      box-shadow: none;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    @media (max-width: 390px) {
+      .gps-banner {
+        grid-template-columns: 58px 1fr;
+        min-height: 86px;
+        padding: 12px 14px;
+      }
+
+      .gps-icon {
+        width: 52px;
+        height: 52px;
+        font-size: 30px;
+      }
+
+      .gps-instruction {
+        font-size: 18px;
+      }
+    }
+
+  </style>
+</head>
+
+<body>
+  <main class="screen">
+    <div id="map"></div>
+    <div class="map-veil"></div>
+
+    <div class="top-pill">
+      <div class="g-mark">G</div>
+      <div>Navigation</div>
+    </div>
+
+    <section class="turn-card">
+      <div class="turn-icon">&#8599;</div>
+      <div>
+        <div id="turnMain" class="turn-main">Ready to start</div>
+        <div id="turnSub" class="turn-sub">Live route inside GigChat</div>
+      </div>
+    </section>
+
+    <div class="provider-arrow" aria-hidden="true"></div>
+
+
+    <section id="gpsBanner" class="gps-banner waiting" aria-live="polite">
+      <div id="gpsIcon" class="gps-icon">↑</div>
+      <div class="gps-copy">
+        <div id="gpsDistance" class="gps-distance">Waiting for route</div>
+        <div id="gpsInstruction" class="gps-instruction">Start navigation</div>
+        <div id="gpsSub" class="gps-sub">GigChat will show the next turn here</div>
+      </div>
+    </section>
+
+    <div class="eta-chip">
+      <span id="etaChip">--</span>
+      <small>ETA</small>
+    </div>
+
+    <button id="recenterBtn" class="recenter" type="button">&#8982;</button>
+
+    <section class="bottom-sheet">
+      <div class="bottom-row">
+        <div class="metric">
+          <strong id="etaMain">Ready</strong>
+          <span id="distanceMain">Secure navigation</span>
+        </div>
+
+        <button id="navBtn" class="start-btn" disabled type="button">
+          Start
+        </button>
+      </div>
+
+      <div id="navStatus" class="status"></div>
+    </section>
+
+    <div id="error" class="error"></div>
+  </main>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
+
+  <script>
+    const API_BASE = "https://ohpsfazyxduzacwdjyrv.functions.supabase.co/rapid-task";
+
+    const navBtn = document.getElementById("navBtn");
+    const navStatusEl = document.getElementById("navStatus");
+    const errorEl = document.getElementById("error");
+    const etaChipEl = document.getElementById("etaChip");
+    const etaMainEl = document.getElementById("etaMain");
+    const distanceMainEl = document.getElementById("distanceMain");
+    const gpsBannerEl = document.getElementById("gpsBanner");
+    const gpsIconEl = document.getElementById("gpsIcon");
+    const gpsDistanceEl = document.getElementById("gpsDistance");
+    const gpsInstructionEl = document.getElementById("gpsInstruction");
+    const gpsSubEl = document.getElementById("gpsSub");
+    const turnMainEl = document.getElementById("turnMain");
+    const turnSubEl = document.getElementById("turnSub");
+    const recenterBtn = document.getElementById("recenterBtn");
+    const screenEl = document.querySelector(".screen");
+
+    let navigationVisibilityTracking = false;
+    let lastNavigationVisibilityAction = "";
+    let lastNavigationVisibilityActionAt = 0;
+
+    let currentToken = "";
+    let exactLat = null;
+    let exactLng = null;
+    const storedMapboxToken = localStorage.getItem("GIGCHAT_MAPBOX_PUBLIC_TOKEN");
+    const promptedMapboxToken = storedMapboxToken || window.prompt("Paste Mapbox public token for this browser");
+    mapboxgl.accessToken = promptedMapboxToken || "";
+
+    if (promptedMapboxToken) {
+      localStorage.setItem("GIGCHAT_MAPBOX_PUBLIC_TOKEN", promptedMapboxToken);
+    }
+
+    let map = null;
+    let routePoints = [];
+    let watchId = null;
+    let lastPingAt = 0;
+    let followProvider = false;
+    let wakeLock = null;
+    let lastProviderPoint = null;
+    let providerMarker = null;
+    let serviceAreaDomMarker = null;
+
+    // Initial Camera Align v30
+    let initialCameraAligned = false;
+
+    // Provider Fast Bearing v23
+    let lastLiveHeading = null;
+    let lastLiveHeadingAt = 0;
+
+    const PROVIDER_HEADING_MAX_AGE_MS = 2500;
+    const PROVIDER_HEADING_MIN_SPEED_MPH = 4;
+
+    // Service Area Circle v22
+    let serviceAreaLngLat = null;
+
+    const SERVICE_AREA_RADIUS_METERS = 60;
+
+    // GPS Navigation Meter v21
+    let navigationRouteSteps = [];
+    let navigationRouteStepsSignature = "";
+    let navigationCurrentStepIndex = 0;
+    let navigationLastTurnNowAt = 0;
+
+    const NAVIGATION_STEP_LOOKAHEAD_COUNT = 3;
+    const NAVIGATION_TURN_NOW_METERS = 12;
+    const NAVIGATION_SWITCH_STEP_METERS = 8;
+
+    // Provider Speed Debug v19
+    let lastSpeedDebugPoint = null;
+    let lastSpeedDebugAt = 0;
+    let smoothedSpeedMph = 0;
+
+    const METERS_PER_SECOND_TO_MPH = 2.2369362920544;
+
+    // Navigation Tracking v18
+    let lastAcceptedGpsLngLat = null;
+    let lastAcceptedGpsAt = 0;
+
+    const NAVIGATION_SNAP_BACKTRACK_SEGMENTS = 2;
+    const NAVIGATION_SNAP_LOOKAHEAD_SEGMENTS = 80;
+    const NAVIGATION_MIN_GPS_MOVE_METERS = 1.5;
+    const NAVIGATION_HARD_CATCHUP_METERS = 75;
+
+    // Route Progress v17
+    let fullRouteLinePoints = [];
+    let routeProgressLastIndex = 0;
+    let routeProgressLastUpdateAt = 0;
+
+    const ROUTE_PROGRESS_UPDATE_INTERVAL_MS = 120;
+
+    // Smooth Provider Navigation v16
+    // Marker Glide v36
+    let smoothProviderPoint = null;
+    let smoothProviderBearing = 0;
+    let smoothProviderAnimationFrame = 0;
+    let lastProviderCameraAt = 0;
+
+    const SMOOTH_PROVIDER_MIN_ANIMATION_MS = 420;
+    const SMOOTH_PROVIDER_MAX_ANIMATION_MS = 950;
+    const SMOOTH_PROVIDER_CAMERA_INTERVAL_MS = 180;
+    const SMOOTH_PROVIDER_MAX_ACCURACY_METERS = 150;
+
+
+    function getToken() {
+      const url = new URL(window.location.href);
+      const queryToken = url.searchParams.get("token");
+      if (queryToken) return queryToken.trim();
+
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      return parts[parts.length - 1] || "";
+    }
+
+    function isProviderSimulatorEnabled() {
+      // Provider Route Simulator v41
+      const url = new URL(window.location.href);
+      const value = String(url.searchParams.get("sim") || "").trim().toLowerCase();
+      return value === "1" || value === "true" || value === "yes";
+    }
+
+    function setStatus(message) {
+      navStatusEl.textContent = message || "";
+    }
+
+    function showError(message) {
+      errorEl.style.display = "block";
+      errorEl.textContent = message || "Something went wrong.";
+    }
+
+    function formatDistance(meters) {
+      const n = Number(meters);
+      if (!Number.isFinite(n) || n <= 0) return "--";
+
+      const miles = n / 1609.344;
+      if (miles < 0.1) return Math.round(n) + " m";
+      if (miles < 10) return miles.toFixed(1) + " mi";
+      return Math.round(miles) + " mi";
+    }
+
+
+    function maneuverIcon(maneuver) {
+      const value = String(maneuver || "").toUpperCase();
+
+      if (value.includes("LEFT")) return "↰";
+      if (value.includes("RIGHT")) return "↱";
+      if (value.includes("ROUNDABOUT")) return "↻";
+      if (value.includes("RAMP")) return "↱";
+      if (value.includes("MERGE")) return "⇢";
+      if (value.includes("DEPART")) return "↑";
+      if (value.includes("ARRIVE")) return "✓";
+      if (value.includes("UTURN")) return "↶";
+
+      return "↑";
+    }
+
+    function cleanGpsInstruction(value) {
+      return String(value || "")
+        .replace(/\s+/g, " ")
+        .replace(/\bToll road\b/gi, "")
+        .replace(/\bDestination will be on the right\b/gi, "Destination on the right")
+        .replace(/\bDestination will be on the left\b/gi, "Destination on the left")
+        .trim();
+    }
+
+    function shortActionFromInstruction(clean) {
+      const value = String(clean || "").trim();
+
+      const lower = value.toLowerCase();
+
+      if (lower.startsWith("head ")) {
+        const onIndex = lower.indexOf(" on ");
+        return onIndex > 0 ? value.slice(0, onIndex).trim() : "Continue";
+      }
+
+      if (lower.startsWith("turn left")) return "Turn left";
+      if (lower.startsWith("turn right")) return "Turn right";
+      if (lower.startsWith("slight left")) return "Slight left";
+      if (lower.startsWith("slight right")) return "Slight right";
+      if (lower.startsWith("keep left")) return "Keep left";
+      if (lower.startsWith("keep right")) return "Keep right";
+      if (lower.startsWith("merge")) return "Merge";
+      if (lower.startsWith("take the exit")) return "Take exit";
+      if (lower.startsWith("at the roundabout")) return "Roundabout";
+      if (lower.startsWith("continue")) return "Continue";
+      if (lower.startsWith("arrive")) return "Arrive";
+
+      return "Continue";
+    }
+
+    function extractStreetFromInstruction(clean) {
+      const value = String(clean || "").trim();
+      const lower = value.toLowerCase();
+
+      const patterns = [
+        " onto ",
+        " on ",
+        " toward ",
+        " merge onto ",
+        " stay on ",
+        " follow ",
+      ];
+
+      let selectedIndex = -1;
+      let selectedPattern = "";
+
+      for (const pattern of patterns) {
+        const index = lower.indexOf(pattern);
+        if (index >= 0 && (selectedIndex === -1 || index < selectedIndex)) {
+          selectedIndex = index;
+          selectedPattern = pattern;
+        }
+      }
+
+      if (selectedIndex === -1) return value;
+
+      let street = value.slice(selectedIndex + selectedPattern.length).trim();
+
+      street = street
+        .replace(/^and stay on\s+/i, "")
+        .replace(/^to stay on\s+/i, "")
+        .replace(/^the\s+/i, "")
+        .replace(/\bToll road\b/gi, "")
+        .replace(/\bContinue to follow\b.*$/i, "")
+        .replace(/\bDestination on the right\b/gi, "")
+        .replace(/\bDestination on the left\b/gi, "")
+        .trim();
+
+      const towardIndex = street.toLowerCase().indexOf(" toward ");
+      if (towardIndex > 0) {
+        street = street.slice(0, towardIndex).trim();
+      }
+
+      const slashParts = street.split("/");
+      if (slashParts.length > 2) {
+        street = slashParts.slice(0, 2).join(" / ");
+      }
+
+      return street || value;
+    }
+
+    function splitGpsInstruction(instruction) {
+      const clean = cleanGpsInstruction(instruction);
+
+      if (!clean) {
+        return {
+          main: "Start navigation",
+          sub: "GigChat will show the next turn here",
+        };
+      }
+
+      return {
+        main: extractStreetFromInstruction(clean),
+        sub: shortActionFromInstruction(clean),
+      };
+    }
+
+    function formatStepDistance(meters) {
+      const value = Number(meters);
+      if (!Number.isFinite(value)) return "";
+
+      if (value < 1000) {
+        return Math.max(1, Math.round(value)) + " m";
+      }
+
+      return (value / 1000).toFixed(value < 10000 ? 1 : 0) + " km";
+    }
+
+    function updateGpsBanner(data) {
+      if (!gpsBannerEl || !gpsIconEl || !gpsDistanceEl || !gpsInstructionEl || !gpsSubEl) {
+        return;
+      }
+
+      const instruction = data && data.next_instruction ? String(data.next_instruction) : "";
+      const maneuver = data && data.next_maneuver ? String(data.next_maneuver) : "";
+      const distanceMeters =
+        data && data.next_step_distance_meters !== undefined
+          ? Number(data.next_step_distance_meters)
+          : null;
+
+      if (!instruction) {
+        gpsBannerEl.classList.add("waiting");
+        gpsIconEl.textContent = "↑";
+        gpsDistanceEl.textContent = "Waiting for route";
+        gpsInstructionEl.textContent = "Start navigation";
+        gpsSubEl.textContent = "GigChat will show the next turn here";
+        return;
+      }
+
+      const parts = splitGpsInstruction(instruction);
+
+      gpsBannerEl.classList.remove("waiting");
+      gpsIconEl.textContent = maneuverIcon(maneuver);
+      gpsDistanceEl.textContent = formatStepDistance(distanceMeters) || "Next";
+      gpsInstructionEl.textContent = parts.main;
+      gpsSubEl.textContent = parts.sub;
+    }
+
+
+
+
+    function shouldSendNavigationVisibilityAction(action) {
+      const now = Date.now();
+
+      if (
+        action === lastNavigationVisibilityAction &&
+        now - lastNavigationVisibilityActionAt < 25000
+      ) {
+        return false;
+      }
+
+      lastNavigationVisibilityAction = action;
+      lastNavigationVisibilityActionAt = now;
+      return true;
+    }
+
+    async function sendNavigationVisibilityAction(action, useBeacon = false) {
+      if (!navigationVisibilityTracking && action !== "navigation_visible") return false;
+      if (!currentToken) return false;
+      if (!shouldSendNavigationVisibilityAction(action)) return false;
+
+      const url = API_BASE + "?task=provider_action";
+
+      if (useBeacon && navigator.sendBeacon) {
+        try {
+          const params = new URLSearchParams();
+          params.set("token", currentToken);
+          params.set("action", action);
+
+          const blob = new Blob([params.toString()], {
+            type: "application/x-www-form-urlencoded;charset=UTF-8",
+          });
+
+          return navigator.sendBeacon(url, blob);
+        } catch (err) {
+          console.warn("GigChat navigation beacon failed:", err);
+          return false;
+        }
+      }
+
+      try {
+        await fetch(url, {
+          method: "POST",
+          keepalive: true,
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            token: currentToken,
+            action,
+          }),
+        });
+
+        return true;
+      } catch (err) {
+        console.warn("GigChat navigation visibility action failed:", err);
+        return false;
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (!navigationVisibilityTracking) return;
+
+      if (document.visibilityState === "hidden") {
+        setStatus("Navigation paused. Reopen map for live ETA.");
+        sendNavigationVisibilityAction("navigation_hidden", true);
+        return;
+      }
+
+      if (document.visibilityState === "visible") {
+        setStatus("Navigation resumed.");
+        sendNavigationVisibilityAction("navigation_resumed", false);
+
+        if (typeof restoreScreenWakeLockIfNeeded === "function") {
+          restoreScreenWakeLockIfNeeded();
+        }
+      }
+    });
+
+    window.addEventListener("pagehide", () => {
+      if (!navigationVisibilityTracking) return;
+      sendNavigationVisibilityAction("navigation_paused", true);
+    });
+
+
+    async function requestScreenWakeLock() {
+      navigationWakeLockRequested = true;
+
+      if (!("wakeLock" in navigator)) {
+        console.warn("Screen Wake Lock API is not available in this browser.");
+        return false;
+      }
+
+      try {
+        if (wakeLock) return true;
+
+        wakeLock = await navigator.wakeLock.request("screen");
+
+        wakeLock.addEventListener("release", () => {
+          wakeLock = null;
+          console.log("GigChat screen wake lock released.");
+        });
+
+        console.log("GigChat screen wake lock active.");
+        return true;
+      } catch (err) {
+        console.warn("GigChat screen wake lock failed:", err);
+        wakeLock = null;
+        return false;
+      }
+    }
+
+    async function restoreScreenWakeLockIfNeeded() {
+      if (!navigationWakeLockRequested) return;
+      if (document.visibilityState !== "visible") return;
+
+      await requestScreenWakeLock();
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        restoreScreenWakeLockIfNeeded();
+      }
+    });
+
+
+    function updateEtaUI(data) {
+      setNavigationRouteStepsFromEta(data);
+      const minutes = data && data.eta_minutes ? Number(data.eta_minutes) : null;
+      const distance = data && data.eta_distance_meters ? Number(data.eta_distance_meters) : null;
+
+      if (Number.isFinite(minutes)) {
+        etaChipEl.textContent = minutes + " min";
+        etaMainEl.textContent = minutes + " min";
+        turnMainEl.textContent = "Live navigation active";
+        turnSubEl.textContent = "Route updated through GigChat";
+      }
+
+      if (Number.isFinite(distance)) {
+        distanceMainEl.textContent = formatDistance(distance) + " remaining";
+      }
+
+      updateGpsBanner(data);
+    }
+
+    function getProviderPosition() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("Location sharing is not available on this device."));
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 14000,
+          maximumAge: 8000,
+        });
+      });
+    }
+
+    async function requestWakeLock() {
+      try {
+        if (!("wakeLock" in navigator)) return;
+        wakeLock = await navigator.wakeLock.request("screen");
+      } catch (_err) {
+        wakeLock = null;
+      }
+    }
+
+    function decodeGooglePolyline(encoded) {
+      if (!encoded || typeof encoded !== "string") return [];
+
+      let index = 0;
+      let lat = 0;
+      let lng = 0;
+      const points = [];
+
+      while (index < encoded.length) {
+        let b;
+        let shift = 0;
+        let result = 0;
+
+        do {
+          b = encoded.charCodeAt(index++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20 && index < encoded.length);
+
+        const deltaLat = (result & 1) ? ~(result >> 1) : result >> 1;
+
+        shift = 0;
+        result = 0;
+
+        do {
+          b = encoded.charCodeAt(index++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20 && index < encoded.length);
+
+        const deltaLng = (result & 1) ? ~(result >> 1) : result >> 1;
+
+        lat += deltaLat;
+        lng += deltaLng;
+
+        points.push([lng / 1e5, lat / 1e5]);
+      }
+
+      return points;
+    }
+
+    function emptyRoute() {
+      return {
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [],
+          },
+        }],
+      };
+    }
+
+    function routeGeoJson(points) {
+      return {
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: points,
+          },
+        }],
+      };
+    }
+
+
+    function tuneGigChatVectorMapStyle() {
+      if (!map || !map.getStyle || !map.getStyle()) return;
+
+      const layers = map.getStyle().layers || [];
+
+      layers.forEach((layer) => {
+        const id = String(layer.id || "").toLowerCase();
+
+        try {
+          if (!map.getLayer(layer.id)) return;
+
+          if (layer.type === "background") {
+            map.setPaintProperty(layer.id, "background-color", "#202a36");
+          }
+
+          if (layer.type === "fill") {
+            if (id.includes("water")) {
+              map.setPaintProperty(layer.id, "fill-color", "#1a3348");
+              map.setPaintProperty(layer.id, "fill-opacity", 0.95);
+            } else if (
+              id.includes("park") ||
+              id.includes("landuse") ||
+              id.includes("green") ||
+              id.includes("wood")
+            ) {
+              map.setPaintProperty(layer.id, "fill-color", "#263949");
+              map.setPaintProperty(layer.id, "fill-opacity", 0.78);
+            } else if (
+              id.includes("building") ||
+              id.includes("structure")
+            ) {
+              map.setPaintProperty(layer.id, "fill-color", "#26303d");
+              map.setPaintProperty(layer.id, "fill-opacity", 0.75);
+            } else {
+              map.setPaintProperty(layer.id, "fill-color", "#202a36");
+              map.setPaintProperty(layer.id, "fill-opacity", 0.72);
+            }
+          }
+
+          if (layer.type === "line") {
+            if (
+              id.includes("tunnel") ||
+              id.includes("bridge") ||
+              id.includes("case") ||
+              id.includes("casing")
+            ) {
+              map.setPaintProperty(layer.id, "line-color", "#455b72");
+              map.setPaintProperty(layer.id, "line-opacity", 0.72);
+            }
+            if (
+              id.includes("road") ||
+              id.includes("street") ||
+              id.includes("highway") ||
+              id.includes("transportation")
+            ) {
+              map.setPaintProperty(layer.id, "line-color", "#536d88");
+              map.setPaintProperty(layer.id, "line-opacity", 0.82);
+            } else if (id.includes("water")) {
+              map.setPaintProperty(layer.id, "line-color", "#234a67");
+              map.setPaintProperty(layer.id, "line-opacity", 0.85);
+            }
+          }
+
+          if (layer.type === "symbol") {
+            if (map.getPaintProperty(layer.id, "text-color") !== undefined) {
+              map.setPaintProperty(layer.id, "text-color", "#f7faff");
+              map.setPaintProperty(layer.id, "text-halo-color", "#203041");
+              map.setPaintProperty(layer.id, "text-halo-width", 1.25);
+              map.setPaintProperty(layer.id, "text-halo-blur", 0.35);
+              map.setPaintProperty(layer.id, "text-opacity", 0.96);
+            }
+
+            if (map.getPaintProperty(layer.id, "icon-color") !== undefined) {
+              map.setPaintProperty(layer.id, "icon-color", "#f7faff");
+            }
+          }
+        } catch (_err) {
+          // Some style layers do not support every paint property.
+        }
+      });
+    }
+
+    function createMap(lat, lng) {
+      map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/navigation-night-v1",
+        center: [lng, lat],
+        zoom: 17,
+        pitch: 64,
+        bearing: 0,
+        attributionControl: false,
+        pitchWithRotate: true,
+        dragRotate: true,
+      });
+
+      map.on("load", () => {
+        tuneGigChatVectorMapStyle();
+        map.addSource("route", {
+          type: "geojson",
+          data: emptyRoute(),
+        });
+
+        map.addLayer({
+          id: "route-glow",
+          type: "line",
+          source: "route",
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+          },
+          paint: {
+            "line-color": "#ffb3bd",
+            "line-width": 18,
+            "line-opacity": 0.46,
+          },
+        });
+
+        map.addLayer({
+          id: "route-main",
+          type: "line",
+          source: "route",
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+          },
+          paint: {
+            "line-color": "#ff405f",
+            "line-width": 9,
+            "line-opacity": 0.95,
+          },
+        });
+
+
+        map.addSource("service-area", {
+          type: "geojson",
+          data: serviceAreaCircleGeoJson(lng, lat),
+        });
+
+        map.addLayer({
+          id: "service-area-fill",
+          type: "fill",
+          source: "service-area",
+          paint: {
+            "fill-color": "#ff4f73",
+            "fill-opacity": 0.16,
+          },
+        });
+
+        map.addLayer({
+          id: "service-area-outline",
+          type: "line",
+          source: "service-area",
+          paint: {
+            "line-color": "#ff6f8d",
+            "line-width": 2,
+            "line-opacity": 0.85,
+          },
+        });
+
+        map.addSource("destination", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [{
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [lng, lat],
+              },
+            }],
+          },
+        });
+
+        map.addLayer({
+          id: "destination-dot",
+          type: "circle",
+          source: "destination",
+          paint: {
+            "circle-radius": 0,
+            "circle-color": "#7c3cff",
+            "circle-stroke-width": 6,
+            "circle-stroke-color": "#ffffff",
+            "circle-opacity": 0,
+          },
+        });
+
+        navBtn.disabled = false;
+      });
+    }
+
+    function bearingBetween(a, b) {
+      const lon1 = a[0] * Math.PI / 180;
+      const lat1 = a[1] * Math.PI / 180;
+      const lon2 = b[0] * Math.PI / 180;
+      const lat2 = b[1] * Math.PI / 180;
+
+      const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+      const x =
+        Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function closestPointOnSegment(p, a, b) {
+      const apx = p.x - a.x;
+      const apy = p.y - a.y;
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const ab2 = abx * abx + aby * aby;
+
+      if (ab2 === 0) return a;
+
+      let t = (apx * abx + apy * aby) / ab2;
+      t = Math.max(0, Math.min(1, t));
+
+      return { x: a.x + abx * t, y: a.y + aby * t, indexRatio: t };
+    }
+
+
+    function bearingBetweenLngLat(from, to) {
+      if (!from || !to) return 0;
+
+      const lng1 = Number(from[0]);
+      const lat1 = Number(from[1]);
+      const lng2 = Number(to[0]);
+      const lat2 = Number(to[1]);
+
+      if (
+        !Number.isFinite(lng1) ||
+        !Number.isFinite(lat1) ||
+        !Number.isFinite(lng2) ||
+        !Number.isFinite(lat2)
+      ) {
+        return 0;
+      }
+
+      const toRad = Math.PI / 180;
+      const toDeg = 180 / Math.PI;
+
+      const phi1 = lat1 * toRad;
+      const phi2 = lat2 * toRad;
+      const deltaLambda = (lng2 - lng1) * toRad;
+
+      const y = Math.sin(deltaLambda) * Math.cos(phi2);
+      const x =
+        Math.cos(phi1) * Math.sin(phi2) -
+        Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+      return normalizeProviderBearing(Math.atan2(y, x) * toDeg);
+    }
+
+    function bearingDifferenceDegrees(a, b) {
+      const from = normalizeProviderBearing(a);
+      const to = normalizeProviderBearing(b);
+      let diff = Math.abs(from - to);
+
+      if (diff > 180) diff = 360 - diff;
+
+      return diff;
+    }
+
+    function routeLookaheadPointFromIndex(index, point, lookaheadMeters = 38) {
+      // Provider Lookahead Bearing v43
+      if (!Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return null;
+      }
+
+      const safeIndex = Math.max(
+        0,
+        Math.min(Number(index) || 0, fullRouteLinePoints.length - 2)
+      );
+
+      const startPoint = Array.isArray(point) ? point : fullRouteLinePoints[safeIndex];
+
+      if (!Array.isArray(startPoint)) {
+        return null;
+      }
+
+      let remainingMeters = Math.max(8, Number(lookaheadMeters) || 38);
+      let previousPoint = startPoint;
+
+      for (let i = safeIndex; i < fullRouteLinePoints.length - 1; i += 1) {
+        const nextPoint = fullRouteLinePoints[i + 1];
+
+        if (!Array.isArray(nextPoint)) continue;
+
+        const segmentMeters = distanceMetersBetweenLngLat(previousPoint, nextPoint);
+
+        if (!Number.isFinite(segmentMeters) || segmentMeters <= 0) {
+          previousPoint = nextPoint;
+          continue;
+        }
+
+        if (segmentMeters >= remainingMeters) {
+          const t = Math.max(0, Math.min(1, remainingMeters / segmentMeters));
+
+          return [
+            previousPoint[0] + (nextPoint[0] - previousPoint[0]) * t,
+            previousPoint[1] + (nextPoint[1] - previousPoint[1]) * t,
+          ];
+        }
+
+        remainingMeters -= segmentMeters;
+        previousPoint = nextPoint;
+      }
+
+      return fullRouteLinePoints[fullRouteLinePoints.length - 1];
+    }
+
+    function routeBearingAtIndex(index, point) {
+      // Provider Lookahead Bearing v43
+      if (!Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return smoothProviderBearing || 0;
+      }
+
+      const safeIndex = Math.max(
+        0,
+        Math.min(Number(index) || 0, fullRouteLinePoints.length - 2)
+      );
+
+      const currentPoint = Array.isArray(point)
+        ? point
+        : fullRouteLinePoints[safeIndex];
+
+      const lookaheadPoint = routeLookaheadPointFromIndex(
+        safeIndex,
+        currentPoint,
+        38
+      );
+
+      if (Array.isArray(currentPoint) && Array.isArray(lookaheadPoint)) {
+        const distanceToLookahead = distanceMetersBetweenLngLat(
+          currentPoint,
+          lookaheadPoint
+        );
+
+        if (Number.isFinite(distanceToLookahead) && distanceToLookahead >= 2) {
+          return bearingBetweenLngLat(currentPoint, lookaheadPoint);
+        }
+      }
+
+      const nextPoint = fullRouteLinePoints[safeIndex + 1];
+
+      if (Array.isArray(currentPoint) && Array.isArray(nextPoint)) {
+        return bearingBetweenLngLat(currentPoint, nextPoint);
+      }
+
+      const previousPoint = fullRouteLinePoints[Math.max(0, safeIndex - 1)];
+      const fallbackPoint = fullRouteLinePoints[safeIndex];
+
+      return bearingBetweenLngLat(previousPoint, fallbackPoint);
+    }
+
+
+    function projectPointToRouteSegment(px, py, ax, ay, bx, by) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+
+      if (len2 <= 0) {
+        return { x: ax, y: ay, t: 0 };
+      }
+
+      const rawT = ((px - ax) * dx + (py - ay) * dy) / len2;
+      const t = Math.max(0, Math.min(1, rawT));
+
+      return {
+        x: ax + dx * t,
+        y: ay + dy * t,
+        t,
+      };
+    }
+
+    function findForwardRouteSnap(lng, lat) {
+      if (
+        !map ||
+        !Array.isArray(fullRouteLinePoints) ||
+        fullRouteLinePoints.length < 2
+      ) {
+        return null;
+      }
+
+      const gpsPoint = [Number(lng), Number(lat)];
+
+      if (!Number.isFinite(gpsPoint[0]) || !Number.isFinite(gpsPoint[1])) {
+        return null;
+      }
+
+      const cursorIndex = Math.max(0, Number(routeProgressLastIndex) || 0);
+      const startIndex = Math.max(0, cursorIndex - NAVIGATION_SNAP_BACKTRACK_SEGMENTS);
+      const endIndex = Math.min(
+        fullRouteLinePoints.length - 2,
+        Math.max(startIndex + 1, cursorIndex + NAVIGATION_SNAP_LOOKAHEAD_SEGMENTS),
+      );
+
+      const gpsScreen = map.project(gpsPoint);
+      const rawGpsBearing =
+        lastAcceptedGpsLngLat &&
+        distanceMetersBetweenLngLat(lastAcceptedGpsLngLat, gpsPoint) >= 3
+          ? bearingBetweenLngLat(lastAcceptedGpsLngLat, gpsPoint)
+          : null;
+
+      let best = null;
+
+      for (let i = startIndex; i <= endIndex; i += 1) {
+        const aCoord = fullRouteLinePoints[i];
+        const bCoord = fullRouteLinePoints[i + 1];
+
+        if (!aCoord || !bCoord) continue;
+
+        const a = map.project(aCoord);
+        const b = map.project(bCoord);
+
+        const projected = projectPointToRouteSegment(
+          gpsScreen.x,
+          gpsScreen.y,
+          a.x,
+          a.y,
+          b.x,
+          b.y,
+        );
+
+        const dx = gpsScreen.x - projected.x;
+        const dy = gpsScreen.y - projected.y;
+        const distancePixelsSquared = dx * dx + dy * dy;
+
+        const lngLat = map.unproject([projected.x, projected.y]);
+        const snappedPoint = [lngLat.lng, lngLat.lat];
+        const routeBearing = routeBearingAtIndex(i, snappedPoint);
+
+        const backwardPenalty = i < cursorIndex ? 5000 * (cursorIndex - i) : 0;
+        const forwardJumpPenalty = Math.max(0, i - cursorIndex) * 3;
+        const headingPenalty =
+          rawGpsBearing === null
+            ? 0
+            : bearingDifferenceDegrees(rawGpsBearing, routeBearing) * 1.8;
+
+        const score =
+          distancePixelsSquared +
+          backwardPenalty +
+          forwardJumpPenalty +
+          headingPenalty;
+
+        if (!best || score < best.score) {
+          best = {
+            index: i,
+            point: snappedPoint,
+            bearing: routeBearing,
+            score,
+            distancePixelsSquared,
+          };
+        }
+      }
+
+      return best;
+    }
+
+    function providerAnimationDurationMs(moveDistanceMeters) {
+      const distance = Number(moveDistanceMeters) || 0;
+      const speed = Number(smoothedSpeedMph) || 0;
+
+      if (distance >= NAVIGATION_HARD_CATCHUP_METERS) return 70;
+      if (speed >= 35) return 90;
+      if (speed >= 25) return 110;
+      if (speed >= 15) return 140;
+      if (distance >= 45) return 120;
+      if (distance >= 22) return 150;
+      if (distance >= 8) return 180;
+
+      return 220;
+    }
+
+
+
+    function decodeNavigationPolyline(encoded) {
+      const value = String(encoded || "");
+      const points = [];
+
+      let index = 0;
+      let lat = 0;
+      let lng = 0;
+
+      while (index < value.length) {
+        let result = 0;
+        let shift = 0;
+        let byte = null;
+
+        do {
+          byte = value.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20 && index < value.length);
+
+        const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lat += deltaLat;
+
+        result = 0;
+        shift = 0;
+
+        do {
+          byte = value.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20 && index < value.length);
+
+        const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lng += deltaLng;
+
+        points.push([lng / 1e5, lat / 1e5]);
+      }
+
+      return points;
+    }
+
+    function normalizeNavigationRouteSteps(rawSteps) {
+      const steps = Array.isArray(rawSteps) ? rawSteps : [];
+
+      return steps
+        .map((step) => {
+          const instruction = String(
+            step.instruction ||
+              step.instructions ||
+              step.next_instruction ||
+              "",
+          ).trim();
+
+          const maneuver = String(step.maneuver || "").trim();
+
+          const encoded =
+            step.encodedPolyline ||
+            step.encoded_polyline ||
+            step.polyline ||
+            "";
+
+          const points = encoded ? decodeNavigationPolyline(encoded) : [];
+
+          const distanceMeters = Number(
+            step.distanceMeters ??
+              step.distance_meters ??
+              step.distance ??
+              0,
+          );
+
+          return {
+            instruction,
+            maneuver,
+            points,
+            distanceMeters: Number.isFinite(distanceMeters) ? distanceMeters : 0,
+          };
+        })
+        .filter((step) => step.instruction || step.points.length >= 2);
+    }
+
+    function routeStepsSignatureFromEta(data) {
+      const rawSteps =
+        data && Array.isArray(data.route_steps)
+          ? data.route_steps
+          : data && Array.isArray(data.routeSteps)
+            ? data.routeSteps
+            : [];
+
+      return rawSteps
+        .map((step) => {
+          return [
+            step.instruction || step.instructions || "",
+            step.maneuver || "",
+            step.encodedPolyline || step.encoded_polyline || step.polyline || "",
+            step.distanceMeters || step.distance_meters || "",
+          ].join(":");
+        })
+        .join("|");
+    }
+
+    function setNavigationRouteStepsFromEta(data) {
+      if (!data) return;
+
+      const rawSteps =
+        Array.isArray(data.route_steps)
+          ? data.route_steps
+          : Array.isArray(data.routeSteps)
+            ? data.routeSteps
+            : [];
+
+      if (!rawSteps.length) return;
+
+      const signature = routeStepsSignatureFromEta(data);
+
+      if (signature && signature === navigationRouteStepsSignature) {
+        return;
+      }
+
+      const normalized = normalizeNavigationRouteSteps(rawSteps);
+
+      if (!normalized.length) return;
+
+      navigationRouteSteps = normalized;
+      navigationRouteStepsSignature = signature;
+      navigationCurrentStepIndex = 0;
+      navigationLastTurnNowAt = 0;
+    }
+
+    function polylineDistanceMeters(points, startIndex = 0) {
+      if (!Array.isArray(points) || points.length < 2) return 0;
+
+      let total = 0;
+
+      for (let i = Math.max(0, startIndex); i < points.length - 1; i += 1) {
+        total += distanceMetersBetweenLngLat(points[i], points[i + 1]);
+      }
+
+      return total;
+    }
+
+    function closestPointOnNavigationPolyline(points, lng, lat) {
+      if (!map || !Array.isArray(points) || points.length < 2) {
+        return null;
+      }
+
+      const providerScreen = map.project([lng, lat]);
+      let best = null;
+
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const aCoord = points[i];
+        const bCoord = points[i + 1];
+
+        if (!aCoord || !bCoord) continue;
+
+        const a = map.project(aCoord);
+        const b = map.project(bCoord);
+
+        const projected = projectPointToRouteSegment(
+          providerScreen.x,
+          providerScreen.y,
+          a.x,
+          a.y,
+          b.x,
+          b.y,
+        );
+
+        const dx = providerScreen.x - projected.x;
+        const dy = providerScreen.y - projected.y;
+        const dist2 = dx * dx + dy * dy;
+        const lngLat = map.unproject([projected.x, projected.y]);
+        const point = [lngLat.lng, lngLat.lat];
+
+        if (!best || dist2 < best.dist2) {
+          best = {
+            point,
+            segmentIndex: i,
+            t: projected.t,
+            dist2,
+          };
+        }
+      }
+
+      return best;
+    }
+
+    function remainingMetersOnStep(step, snap) {
+      if (!step || !snap || !Array.isArray(step.points) || step.points.length < 2) {
+        return null;
+      }
+
+      const points = step.points;
+      const segmentIndex = Math.max(
+        0,
+        Math.min(Number(snap.segmentIndex) || 0, points.length - 2),
+      );
+
+      const segmentEnd = points[segmentIndex + 1];
+      let remaining = distanceMetersBetweenLngLat(snap.point, segmentEnd);
+
+      for (let i = segmentIndex + 1; i < points.length - 1; i += 1) {
+        remaining += distanceMetersBetweenLngLat(points[i], points[i + 1]);
+      }
+
+      return remaining;
+    }
+
+    function formatDynamicNavigationDistance(meters) {
+      const value = Number(meters);
+
+      if (!Number.isFinite(value)) return "";
+
+      if (value <= NAVIGATION_TURN_NOW_METERS) {
+        return "Now";
+      }
+
+      if (value < 50) {
+        return `${Math.max(5, Math.round(value / 5) * 5)} m`;
+      }
+
+      if (value < 1000) {
+        return `${Math.max(10, Math.round(value / 10) * 10)} m`;
+      }
+
+      const miles = value / 1609.344;
+
+      if (miles < 10) {
+        return `${miles.toFixed(1)} mi`;
+      }
+
+      return `${Math.round(miles)} mi`;
+    }
+
+    function findStepAwareRouteSnap(lng, lat) {
+      if (!navigationRouteSteps.length) return null;
+
+      const startStep = Math.max(0, navigationCurrentStepIndex);
+      const endStep = Math.min(
+        navigationRouteSteps.length - 1,
+        startStep + NAVIGATION_STEP_LOOKAHEAD_COUNT,
+      );
+
+      let best = null;
+
+      for (let stepIndex = startStep; stepIndex <= endStep; stepIndex += 1) {
+        const step = navigationRouteSteps[stepIndex];
+
+        if (!step || !Array.isArray(step.points) || step.points.length < 2) {
+          continue;
+        }
+
+        const snap = closestPointOnNavigationPolyline(step.points, lng, lat);
+
+        if (!snap) continue;
+
+        const remainingMeters = remainingMetersOnStep(step, snap);
+        const routeBearing = bearingBetweenLngLat(
+          snap.point,
+          step.points[Math.min(snap.segmentIndex + 1, step.points.length - 1)],
+        );
+
+        const stepPenalty = Math.max(0, stepIndex - navigationCurrentStepIndex) * 450;
+        const score = snap.dist2 + stepPenalty;
+
+        if (!best || score < best.score) {
+          best = {
+            stepIndex,
+            step,
+            snap,
+            point: snap.point,
+            bearing: routeBearing,
+            remainingMeters,
+            score,
+            distancePixelsSquared: snap.dist2,
+          };
+        }
+      }
+
+      return best;
+    }
+
+    function updateGpsNavigationBanner(stepIndex, remainingMeters) {
+      if (!navigationRouteSteps.length) return;
+
+      const step = navigationRouteSteps[stepIndex];
+
+      if (!step) return;
+
+      const distanceEl = document.getElementById("gpsDistance");
+      const instructionEl = document.getElementById("gpsInstruction");
+      const subEl = document.getElementById("gpsSub");
+
+      const instruction = String(step.instruction || "").trim();
+      const clean =
+        typeof cleanGpsInstruction === "function"
+          ? cleanGpsInstruction(instruction)
+          : instruction;
+
+      let street = clean;
+      let action = "";
+
+      if (typeof splitGpsInstruction === "function") {
+        const split = splitGpsInstruction(instruction);
+        street = split.street || clean;
+        action = split.action || "";
+      } else if (typeof shortActionFromInstruction === "function") {
+        action = shortActionFromInstruction(clean);
+      }
+
+      const isTurnNow =
+        Number.isFinite(Number(remainingMeters)) &&
+        Number(remainingMeters) <= NAVIGATION_TURN_NOW_METERS;
+
+      if (distanceEl) {
+        distanceEl.textContent = formatDynamicNavigationDistance(remainingMeters);
+      }
+
+      if (instructionEl) {
+        instructionEl.textContent = street || "Continue";
+      }
+
+      if (subEl) {
+        subEl.textContent = isTurnNow ? "Turn now" : action || "Continue";
+      }
+    }
+
+    function updateGpsNavigationMeter(lng, lat, bearing = null) {
+      const best = findStepAwareRouteSnap(lng, lat);
+
+      if (!best) return null;
+
+      if (best.stepIndex > navigationCurrentStepIndex) {
+        navigationCurrentStepIndex = best.stepIndex;
+      }
+
+      let activeStepIndex = navigationCurrentStepIndex;
+      let remainingMeters = best.remainingMeters;
+
+      if (
+        Number.isFinite(Number(remainingMeters)) &&
+        Number(remainingMeters) <= NAVIGATION_SWITCH_STEP_METERS &&
+        activeStepIndex < navigationRouteSteps.length - 1
+      ) {
+        const now = Date.now();
+
+        if (now - navigationLastTurnNowAt > 900) {
+          navigationCurrentStepIndex = activeStepIndex + 1;
+          navigationLastTurnNowAt = now;
+
+          const nextBest = findStepAwareRouteSnap(lng, lat);
+
+          if (nextBest) {
+            activeStepIndex = nextBest.stepIndex;
+            remainingMeters = nextBest.remainingMeters;
+          } else {
+            activeStepIndex = navigationCurrentStepIndex;
+            const nextStep = navigationRouteSteps[activeStepIndex];
+            remainingMeters = nextStep ? nextStep.distanceMeters : null;
+          }
+        }
+      }
+
+      updateGpsNavigationBanner(activeStepIndex, remainingMeters);
+
+      return {
+        stepIndex: activeStepIndex,
+        remainingMeters,
+        bearing: best.bearing,
+        point: best.point,
+      };
+    }
+
+
+
+    function updateLiveHeadingFromCoords(coords) {
+      if (!coords) return;
+
+      const rawHeading = Number(coords.heading);
+      const rawSpeed = Number(coords.speed);
+      const speedMph = Number.isFinite(rawSpeed) && rawSpeed >= 0
+        ? rawSpeed * METERS_PER_SECOND_TO_MPH
+        : smoothedSpeedMph;
+
+      if (
+        Number.isFinite(rawHeading) &&
+        rawHeading >= 0 &&
+        Number.isFinite(speedMph) &&
+        speedMph >= PROVIDER_HEADING_MIN_SPEED_MPH
+      ) {
+        lastLiveHeading = normalizeProviderBearing(rawHeading);
+        lastLiveHeadingAt = Date.now();
+      }
+    }
+
+    function getFreshLiveHeading() {
+      if (!Number.isFinite(Number(lastLiveHeading))) return null;
+
+      if (Date.now() - lastLiveHeadingAt > PROVIDER_HEADING_MAX_AGE_MS) {
+        return null;
+      }
+
+      return normalizeProviderBearing(Number(lastLiveHeading));
+    }
+
+    function chooseProviderBearing(routeBearing) {
+      // Provider Arrow Bearing v42
+      // Smooth route bearing through turns/intersections while still trusting the route.
+      const route = normalizeProviderBearing(routeBearing);
+
+      if (!smoothProviderPoint || !Number.isFinite(Number(smoothProviderBearing))) {
+        return route;
+      }
+
+      const current = normalizeProviderBearing(Number(smoothProviderBearing));
+      const diff = bearingDifferenceDegrees(current, route);
+
+      if (diff < 4) {
+        return current;
+      }
+
+      const factor = diff >= 85 ? 0.62 : diff >= 35 ? 0.48 : 0.34;
+      return lerpBearing(current, route, factor);
+    }
+
+    function nearestRoutePoint(lng, lat) {
+      const stepSnap = findStepAwareRouteSnap(lng, lat);
+
+      if (stepSnap) {
+        if (stepSnap.stepIndex > navigationCurrentStepIndex) {
+          navigationCurrentStepIndex = stepSnap.stepIndex;
+        }
+
+        return [
+          stepSnap.point[0],
+          stepSnap.point[1],
+          chooseProviderBearing(stepSnap.bearing),
+          routeProgressLastIndex || 0,
+          stepSnap.distancePixelsSquared,
+        ];
+      }
+
+      const snap = findForwardRouteSnap(lng, lat);
+
+      if (snap) {
+        const nextIndex = Math.max(routeProgressLastIndex, snap.index);
+        routeProgressLastIndex = nextIndex;
+
+        return [
+          snap.point[0],
+          snap.point[1],
+          chooseProviderBearing(snap.bearing),
+          nextIndex,
+          snap.distancePixelsSquared,
+        ];
+      }
+
+      return [
+        Number(lng),
+        Number(lat),
+        chooseProviderBearing(smoothProviderBearing || 0),
+        routeProgressLastIndex || 0,
+        null,
+      ];
+    }
+
+
+    function servicePointGeoJson(lng, lat) {
+      return {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [Number(lng), Number(lat)],
+            },
+            properties: {},
+          },
+        ],
+      };
+    }
+
+    function serviceAreaCircleGeoJson(lng, lat, radiusMeters = SERVICE_AREA_RADIUS_METERS) {
+      const centerLng = Number(lng);
+      const centerLat = Number(lat);
+      const radius = Number(radiusMeters);
+
+      if (
+        !Number.isFinite(centerLng) ||
+        !Number.isFinite(centerLat) ||
+        !Number.isFinite(radius)
+      ) {
+        return {
+          type: "FeatureCollection",
+          features: [],
+        };
+      }
+
+      const points = [];
+      const earthRadiusMeters = 6371000;
+      const latRad = centerLat * Math.PI / 180;
+      const lngRad = centerLng * Math.PI / 180;
+      const angularDistance = radius / earthRadiusMeters;
+
+      for (let i = 0; i <= 96; i += 1) {
+        const bearing = (i / 96) * Math.PI * 2;
+
+        const pointLatRad = Math.asin(
+          Math.sin(latRad) * Math.cos(angularDistance) +
+            Math.cos(latRad) * Math.sin(angularDistance) * Math.cos(bearing),
+        );
+
+        const pointLngRad =
+          lngRad +
+          Math.atan2(
+            Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRad),
+            Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(pointLatRad),
+          );
+
+        points.push([
+          pointLngRad * 180 / Math.PI,
+          pointLatRad * 180 / Math.PI,
+        ]);
+      }
+
+      return {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [points],
+            },
+            properties: {},
+          },
+        ],
+      };
+    }
+
+    function updateServiceAreaCircle(lng, lat) {
+      const serviceLng = Number(lng);
+      const serviceLat = Number(lat);
+
+      if (!Number.isFinite(serviceLng) || !Number.isFinite(serviceLat)) return;
+
+      serviceAreaLngLat = [serviceLng, serviceLat];
+
+      if (!map || !map.getSource) return;
+
+      const areaSource = map.getSource("service-area");
+      const destinationSource = map.getSource("destination");
+
+      if (areaSource && typeof areaSource.setData === "function") {
+        areaSource.setData(serviceAreaCircleGeoJson(serviceLng, serviceLat));
+      }
+
+      if (destinationSource && typeof destinationSource.setData === "function") {
+        destinationSource.setData(servicePointGeoJson(serviceLng, serviceLat));
+      }
+    }
+
+
+    function drawEncodedRoute(encoded) {
+      const points = decodeGooglePolyline(encoded);
+      if (points.length < 2 || !map || !map.getSource("route")) return false;
+
+      routePoints = points;
+      fullRouteLinePoints = Array.isArray(points) ? points.slice() : [];
+      routeProgressLastIndex = 0;
+      map.getSource("route").setData(routeGeoJson(fullRouteLinePoints));
+
+      return true;
+    }
+
+
+    function setProviderMarker(lng, lat, bearing) {
+      if (!map) return;
+
+      if (!providerMarker) {
+        const el = document.createElement("div");
+        el.className = "nav-arrow-marker";
+
+        providerMarker = new mapboxgl.Marker({
+          element: el,
+          anchor: "center",
+          rotationAlignment: "map",
+          pitchAlignment: "map",
+        })
+          .setLngLat([lng, lat])
+          .addTo(map);
+      } else {
+        providerMarker.setLngLat([lng, lat]);
+      }
+
+      if (providerMarker && typeof providerMarker.setRotation === "function") {
+        providerMarker.setRotation(Number.isFinite(bearing) ? bearing : 0);
+      }
+    }
+
+    function cameraToProvider(lng, lat, bearing) {
+      if (!map) return;
+
+      map.easeTo({
+        center: [lng, lat],
+        zoom: 17.7,
+        pitch: 64,
+        bearing: Number.isFinite(bearing) ? bearing : map.getBearing(),
+        duration: 800,
+        padding: {
+          top: 130,
+          bottom: 330,
+          left: 0,
+          right: 0,
+        },
+      });
+    }
+
+
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, value));
+    }
+
+    function easeSmoothProvider(t) {
+      const x = clamp01(t);
+      return x < 0.5
+        ? 4 * x * x * x
+        : 1 - Math.pow(-2 * x + 2, 3) / 2;
+    }
+
+    function lerpNumber(from, to, t) {
+      return from + (to - from) * t;
+    }
+
+    function normalizeProviderBearing(value) {
+      if (!Number.isFinite(value)) return 0;
+      return ((value % 360) + 360) % 360;
+    }
+
+    function lerpBearing(from, to, t) {
+      const a = normalizeProviderBearing(from);
+      const b = normalizeProviderBearing(to);
+      let delta = b - a;
+
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+
+      return normalizeProviderBearing(a + delta * t);
+    }
+
+    function distanceMetersBetweenLngLat(a, b) {
+      if (!a || !b) return 0;
+
+      const earthRadiusMeters = 6371000;
+      const lng1 = Number(a[0]);
+      const lat1 = Number(a[1]);
+      const lng2 = Number(b[0]);
+      const lat2 = Number(b[1]);
+
+      if (
+        !Number.isFinite(lng1) ||
+        !Number.isFinite(lat1) ||
+        !Number.isFinite(lng2) ||
+        !Number.isFinite(lat2)
+      ) {
+        return 0;
+      }
+
+      const toRad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * toRad;
+      const dLng = (lng2 - lng1) * toRad;
+      const rLat1 = lat1 * toRad;
+      const rLat2 = lat2 * toRad;
+
+      const h =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(rLat1) *
+          Math.cos(rLat2) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2);
+
+      return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    function animateProviderMarkerTo(lng, lat, bearing) {
+      const target = [
+        Number(lng),
+        Number(lat),
+        normalizeProviderBearing(Number(bearing)),
+      ];
+
+      if (!Number.isFinite(target[0]) || !Number.isFinite(target[1])) return;
+
+      if (!smoothProviderPoint) {
+        smoothProviderPoint = target;
+        smoothProviderBearing = target[2];
+        setProviderMarker(target[0], target[1], smoothProviderBearing);
+        updateGpsNavigationMeter(target[0], target[1], smoothProviderBearing);
+        updateRouteProgressFromProvider(target[0], target[1], true);
+        return;
+      }
+
+      if (smoothProviderAnimationFrame) {
+        cancelAnimationFrame(smoothProviderAnimationFrame);
+        smoothProviderAnimationFrame = 0;
+      }
+
+      const from = [
+        Number(smoothProviderPoint[0]),
+        Number(smoothProviderPoint[1]),
+        normalizeProviderBearing(Number(smoothProviderBearing)),
+      ];
+
+      const moveDistanceMeters = distanceMetersBetweenLngLat(from, target);
+      const bearingDelta = bearingDifferenceDegrees(from[2], target[2]);
+
+      if (moveDistanceMeters >= 140) {
+        smoothProviderPoint = target;
+        smoothProviderBearing = target[2];
+        setProviderMarker(target[0], target[1], target[2]);
+        updateGpsNavigationMeter(target[0], target[1], target[2]);
+        updateRouteProgressFromProvider(target[0], target[1], true);
+        return;
+      }
+
+      const durationMs = Math.max(
+        SMOOTH_PROVIDER_MIN_ANIMATION_MS,
+        Math.min(
+          SMOOTH_PROVIDER_MAX_ANIMATION_MS,
+          providerAnimationDurationMs(moveDistanceMeters),
+        ),
+      );
+
+      // Rotation must react faster than position.
+      const bearingDurationMs = bearingDelta >= 18
+        ? Math.min(120, durationMs * 0.35)
+        : Math.min(180, durationMs * 0.55);
+
+      const startedAt = performance.now();
+
+      const step = (now) => {
+        const positionProgress = clamp01((now - startedAt) / durationMs);
+        const bearingProgress = clamp01((now - startedAt) / bearingDurationMs);
+
+        const easedPosition = easeSmoothProvider(positionProgress);
+        const easedBearing = easeSmoothProvider(bearingProgress);
+
+        const currentLng = lerpNumber(from[0], target[0], easedPosition);
+        const currentLat = lerpNumber(from[1], target[1], easedPosition);
+        const currentBearing = lerpBearing(from[2], target[2], easedBearing);
+
+        smoothProviderPoint = [currentLng, currentLat, currentBearing];
+        smoothProviderBearing = currentBearing;
+
+        setProviderMarker(currentLng, currentLat, currentBearing);
+        updateGpsNavigationMeter(currentLng, currentLat, currentBearing);
+        updateRouteProgressFromProvider(currentLng, currentLat);
+
+        if (positionProgress < 1 || bearingProgress < 1) {
+          smoothProviderAnimationFrame = requestAnimationFrame(step);
+          return;
+        }
+
+        smoothProviderAnimationFrame = 0;
+        smoothProviderPoint = target;
+        smoothProviderBearing = target[2];
+        setProviderMarker(target[0], target[1], target[2]);
+        updateGpsNavigationMeter(target[0], target[1], target[2]);
+        updateRouteProgressFromProvider(target[0], target[1], true);
+      };
+
+      smoothProviderAnimationFrame = requestAnimationFrame(step);
+    }
+
+    function smoothCameraToProvider(lng, lat, bearing) {
+      const now = Date.now();
+
+      if (now - lastProviderCameraAt < SMOOTH_PROVIDER_CAMERA_INTERVAL_MS) {
+        return;
+      }
+
+      lastProviderCameraAt = now;
+      cameraToProvider(lng, lat, bearing);
+    }
+
+
+
+    function projectRouteProgressPoint(px, py, ax, ay, bx, by) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+
+      if (len2 <= 0) {
+        return { x: ax, y: ay, t: 0 };
+      }
+
+      const rawT = ((px - ax) * dx + (py - ay) * dy) / len2;
+      const t = Math.max(0, Math.min(1, rawT));
+
+      return {
+        x: ax + dx * t,
+        y: ay + dy * t,
+        t,
+      };
+    }
+
+    function remainingRouteFromProvider(lng, lat) {
+      if (!map || !Array.isArray(fullRouteLinePoints) || fullRouteLinePoints.length < 2) {
+        return null;
+      }
+
+      const snap = findForwardRouteSnap(lng, lat);
+
+      if (!snap) return null;
+
+      const nextIndex = Math.max(routeProgressLastIndex, snap.index);
+      routeProgressLastIndex = nextIndex;
+
+      const startPoint =
+        snap.index >= nextIndex
+          ? snap.point
+          : fullRouteLinePoints[nextIndex] || snap.point;
+
+      const remaining = [
+        startPoint,
+        ...fullRouteLinePoints.slice(nextIndex + 1),
+      ].filter(Boolean);
+
+      if (remaining.length >= 2) {
+        return remaining;
+      }
+
+      const destination = fullRouteLinePoints[fullRouteLinePoints.length - 1];
+
+      if (destination) {
+        return [startPoint, destination].filter(Boolean);
+      }
+
+      return null;
+    }
+
+    function updateRouteProgressFromProvider(lng, lat, force = false) {
+      const now = Date.now();
+
+      if (!force && now - routeProgressLastUpdateAt < ROUTE_PROGRESS_UPDATE_INTERVAL_MS) {
+        return;
+      }
+
+      routeProgressLastUpdateAt = now;
+
+      const source = map && map.getSource ? map.getSource("route") : null;
+      if (!source || typeof source.setData !== "function") return;
+
+      const remaining = remainingRouteFromProvider(lng, lat);
+      if (!remaining || remaining.length < 2) return;
+
+      source.setData(routeGeoJson(remaining));
+    }
+
+
+
+    function ensureProviderSpeedChip() {
+      let chip = document.getElementById("providerSpeedChip");
+
+      if (chip) return chip;
+
+      chip = document.createElement("div");
+      chip.id = "providerSpeedChip";
+      chip.style.position = "fixed";
+      chip.style.right = "24px";
+      chip.style.top = "210px";
+      chip.style.zIndex = "18";
+      chip.style.padding = "9px 12px";
+      chip.style.borderRadius = "18px";
+      chip.style.background = "rgba(10, 12, 18, 0.82)";
+      chip.style.border = "1px solid rgba(255, 255, 255, 0.16)";
+      chip.style.backdropFilter = "blur(14px)";
+      chip.style.boxShadow = "0 10px 30px rgba(0, 0, 0, 0.35)";
+      chip.style.color = "#ffffff";
+      chip.style.fontFamily = "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+      chip.style.textAlign = "right";
+      chip.style.pointerEvents = "none";
+      chip.innerHTML = '<div style="font-size:11px;opacity:.65;letter-spacing:.04em;text-transform:uppercase;">Speed</div><div id="providerSpeedValue" style="font-size:22px;font-weight:800;line-height:1.05;">-- mph</div><div id="providerSpeedAccuracy" style="font-size:11px;opacity:.62;margin-top:3px;">GPS --</div>';
+
+      document.body.appendChild(chip);
+      return chip;
+    }
+
+    // Speed Chip Always Visible v24
+    function showProviderSpeedChipNow() {
+      if (typeof ensureProviderSpeedChip !== "function") return;
+
+      const chip = ensureProviderSpeedChip();
+
+      if (!chip) return;
+
+      chip.style.display = "block";
+      chip.style.top = "210px";
+      chip.style.right = "24px";
+      chip.style.zIndex = "18";
+
+      const valueEl = document.getElementById("providerSpeedValue");
+      const accuracyEl = document.getElementById("providerSpeedAccuracy");
+
+      if (valueEl && !String(valueEl.textContent || "").trim()) {
+        valueEl.textContent = "-- mph";
+      }
+
+      if (accuracyEl && !String(accuracyEl.textContent || "").trim()) {
+        accuracyEl.textContent = "GPS --";
+      }
+    }
+
+    setTimeout(showProviderSpeedChipNow, 250);
+    setTimeout(showProviderSpeedChipNow, 900);
+
+    window.addEventListener("load", () => {
+      setTimeout(showProviderSpeedChipNow, 250);
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        setTimeout(showProviderSpeedChipNow, 250);
+      }
+    });
+
+
+
+    function updateProviderSpeedDebug(coords) {
+      if (!coords) return;
+
+      const chip = ensureProviderSpeedChip();
+      const valueEl = document.getElementById("providerSpeedValue");
+      const accuracyEl = document.getElementById("providerSpeedAccuracy");
+
+      const lat = Number(coords.latitude);
+      const lng = Number(coords.longitude);
+      const accuracy = Number(coords.accuracy);
+      const now = Date.now();
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      let speedMph = null;
+
+      if (Number.isFinite(Number(coords.speed)) && Number(coords.speed) >= 0) {
+        speedMph = Number(coords.speed) * METERS_PER_SECOND_TO_MPH;
+      }
+
+      const currentPoint = [lng, lat];
+
+      if (speedMph === null && lastSpeedDebugPoint && lastSpeedDebugAt) {
+        const seconds = Math.max(0.1, (now - lastSpeedDebugAt) / 1000);
+        const meters = distanceMetersBetweenLngLat(lastSpeedDebugPoint, currentPoint);
+
+        if (meters < 2.5) {
+          speedMph = 0;
+        } else {
+          speedMph = (meters / seconds) * METERS_PER_SECOND_TO_MPH;
+        }
+      }
+
+      lastSpeedDebugPoint = currentPoint;
+      lastSpeedDebugAt = now;
+
+      if (speedMph === null || !Number.isFinite(speedMph)) {
+        if (valueEl) valueEl.textContent = "-- mph";
+      } else {
+        const safeSpeed = Math.max(0, Math.min(120, speedMph));
+        smoothedSpeedMph = smoothedSpeedMph * 0.65 + safeSpeed * 0.35;
+
+        if (valueEl) valueEl.textContent = `${Math.round(smoothedSpeedMph)} mph`;
+      }
+
+      if (accuracyEl) {
+        accuracyEl.textContent = Number.isFinite(accuracy)
+          ? `GPS ±${Math.round(accuracy)} m`
+          : "GPS --";
+      }
+
+      if (chip) {
+        chip.style.display = "block";
+      }
+    }
+
+
+
+    function alignInitialCameraToProvider(lng, lat, bearing) {
+      if (initialCameraAligned) return;
+      if (!map || !map.jumpTo) return;
+
+      const center = [Number(lng), Number(lat)];
+      const routeBearing = Number(bearing);
+
+      if (
+        !Number.isFinite(center[0]) ||
+        !Number.isFinite(center[1]) ||
+        !Number.isFinite(routeBearing)
+      ) {
+        return;
+      }
+
+      initialCameraAligned = true;
+
+      map.jumpTo({
+        center,
+        bearing: routeBearing,
+        pitch: 62,
+        zoom: Math.max(map.getZoom ? map.getZoom() : 18, 18),
+      });
+    }
+
+
+    function updateProviderCamera(rawLat, rawLng, accuracy = null) {
+      const lat = Number(rawLat);
+      const lng = Number(rawLng);
+      const gpsAccuracy = Number(accuracy);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      if (
+        smoothProviderPoint &&
+        Number.isFinite(gpsAccuracy) &&
+        gpsAccuracy > SMOOTH_PROVIDER_MAX_ACCURACY_METERS
+      ) {
+        return;
+      }
+
+      const rawPoint = [lng, lat];
+      const now = Date.now();
+
+      if (lastAcceptedGpsLngLat) {
+        const movedMeters = distanceMetersBetweenLngLat(lastAcceptedGpsLngLat, rawPoint);
+        const secondsSinceLastGps = Math.max(0.1, (now - lastAcceptedGpsAt) / 1000);
+
+        if (movedMeters < NAVIGATION_MIN_GPS_MOVE_METERS && secondsSinceLastGps < 2.5) {
+          return;
+        }
+      }
+
+      const snapped = nearestRoutePoint(lng, lat);
+      lastProviderPoint = snapped;
+
+      lastAcceptedGpsLngLat = rawPoint;
+      lastAcceptedGpsAt = now;
+
+      updateGpsNavigationMeter(snapped[0], snapped[1], snapped[2]);
+      updateRouteProgressFromProvider(snapped[0], snapped[1], true);
+      alignInitialCameraToProvider(snapped[0], snapped[1], snapped[2]);
+      animateProviderMarkerTo(snapped[0], snapped[1], snapped[2]);
+      smoothCameraToProvider(snapped[0], snapped[1], snapped[2]);
+    }
+
+    function buildProviderSimulatorStartPoint(centerLng, centerLat) {
+      // Provider Route Simulator v41
+      const lng = Number(centerLng);
+      const lat = Number(centerLat);
+
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+
+      return {
+        longitude: lng - 0.018,
+        latitude: lat - 0.014,
+        accuracy: 8,
+        speed: 13.4,
+        heading: 45,
+      };
+    }
+
+    function providerSimulatorPositionFromCoords(coords) {
+      // Provider Route Simulator v41
+      return {
+        coords: {
+          latitude: Number(coords.latitude),
+          longitude: Number(coords.longitude),
+          accuracy: Number.isFinite(Number(coords.accuracy)) ? Number(coords.accuracy) : 8,
+          speed: Number.isFinite(Number(coords.speed)) ? Number(coords.speed) : 13.4,
+          heading: Number.isFinite(Number(coords.heading)) ? Number(coords.heading) : 45,
+        },
+      };
+    }
+
+    function buildProviderSimulatorRouteMetrics(points) {
+      // Provider Route Simulator v41
+      const cumulative = [0];
+      let total = 0;
+
+      for (let i = 1; i < points.length; i += 1) {
+        const prev = points[i - 1];
+        const current = points[i];
+        const segmentMeters = distanceMetersBetweenLngLat(prev, current);
+
+        if (Number.isFinite(segmentMeters) && segmentMeters > 0) {
+          total += segmentMeters;
+        }
+
+        cumulative.push(total);
+      }
+
+      return {
+        cumulative,
+        totalMeters: total,
+      };
+    }
+
+    function interpolateProviderSimulatorPoint(a, b, t) {
+      // Provider Route Simulator v41
+      const safeT = Math.max(0, Math.min(1, Number(t) || 0));
+
+      return [
+        a[0] + (b[0] - a[0]) * safeT,
+        a[1] + (b[1] - a[1]) * safeT,
+      ];
+    }
+
+    function providerSimulatorPointAtDistance(points, metrics, meters) {
+      // Provider Route Simulator v41
+      const targetMeters = Math.max(
+        0,
+        Math.min(Number(meters) || 0, metrics.totalMeters)
+      );
+
+      let index = 0;
+
+      while (
+        index < metrics.cumulative.length - 2 &&
+        metrics.cumulative[index + 1] < targetMeters
+      ) {
+        index += 1;
+      }
+
+      const startMeters = metrics.cumulative[index];
+      const endMeters = metrics.cumulative[index + 1];
+      const segmentMeters = Math.max(0.001, endMeters - startMeters);
+      const t = (targetMeters - startMeters) / segmentMeters;
+
+      const current = interpolateProviderSimulatorPoint(
+        points[index],
+        points[index + 1],
+        t
+      );
+
+      const lookAheadMeters = Math.min(
+        metrics.totalMeters,
+        targetMeters + 35
+      );
+
+      let lookAheadIndex = index;
+
+      while (
+        lookAheadIndex < metrics.cumulative.length - 2 &&
+        metrics.cumulative[lookAheadIndex + 1] < lookAheadMeters
+      ) {
+        lookAheadIndex += 1;
+      }
+
+      const lookStartMeters = metrics.cumulative[lookAheadIndex];
+      const lookEndMeters = metrics.cumulative[lookAheadIndex + 1];
+      const lookSegmentMeters = Math.max(0.001, lookEndMeters - lookStartMeters);
+      const lookT = (lookAheadMeters - lookStartMeters) / lookSegmentMeters;
+
+      const lookAhead = interpolateProviderSimulatorPoint(
+        points[lookAheadIndex],
+        points[lookAheadIndex + 1],
+        lookT
+      );
+
+      const bearing = bearingBetweenLngLat(current, lookAhead);
+
+      return [current[0], current[1], bearing];
+    }
+
+    function providerSimulatorPositionFromRouteDistance(points, metrics, meters) {
+      // Provider Route Simulator v41
+      const point = providerSimulatorPointAtDistance(points, metrics, meters);
+
+      return providerSimulatorPositionFromCoords({
+        latitude: point[1],
+        longitude: point[0],
+        accuracy: 8,
+        speed: 13.4,
+        heading: point[2],
+      });
+    }
+
+    function handleProviderSimulatorPosition(position) {
+      // Provider Route Simulator v41
+      const coords = position.coords || {};
+
+      if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
+        return;
+      }
+
+      updateProviderSpeedDebug(coords);
+      updateLiveHeadingFromCoords(coords);
+      updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+    }
+
+    async function startProviderRouteSimulator() {
+      // Provider Route Simulator v41
+      if (!isProviderSimulatorEnabled()) return;
+
+      if (!map || (typeof map.loaded === "function" && !map.loaded())) {
+        setTimeout(startProviderRouteSimulator, 300);
+        return;
+      }
+
+      if (window.__gigchatProviderRouteSimulatorTimer) {
+        clearInterval(window.__gigchatProviderRouteSimulatorTimer);
+        window.__gigchatProviderRouteSimulatorTimer = null;
+      }
+
+      const fakeStart = buildProviderSimulatorStartPoint(exactLng, exactLat);
+
+      if (!fakeStart) {
+        setStatus("Simulator failed: missing map coordinates.");
+        return;
+      }
+
+      followProvider = true;
+
+      if (screenEl) screenEl.classList.add("live");
+
+      navBtn.disabled = true;
+      navBtn.textContent = "Simulator on";
+      turnMainEl.textContent = "Simulator mode active";
+      turnSubEl.textContent = "Loading real route through live pipeline";
+      setStatus("Simulator loading real route...");
+
+      try {
+        const eta = await sendProviderLocationPing(
+          providerSimulatorPositionFromCoords(fakeStart)
+        );
+
+        updateEtaUI(eta);
+        setNavigationRouteStepsFromEta(eta);
+
+        const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
+
+        if (
+          !routeLoaded ||
+          !Array.isArray(fullRouteLinePoints) ||
+          fullRouteLinePoints.length < 2
+        ) {
+          setStatus("Simulator failed: backend did not return a route.");
+          return;
+        }
+
+        const simulatorRoutePoints = fullRouteLinePoints.slice();
+        const metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
+
+        if (!Number.isFinite(metrics.totalMeters) || metrics.totalMeters < 10) {
+          setStatus("Simulator failed: route is too short.");
+          return;
+        }
+
+        routeProgressLastIndex = 0;
+        routeProgressLastUpdateAt = 0;
+        lastAcceptedGpsLngLat = null;
+        lastAcceptedGpsAt = 0;
+        smoothProviderPoint = null;
+        initialCameraAligned = false;
+
+        const tickMs = 850;
+        const speedMetersPerSecond = 13.4;
+        const metersPerTick = speedMetersPerSecond * (tickMs / 1000);
+
+        let traveledMeters = 0;
+
+        setStatus("Simulator following route by distance. No GPS permission needed.");
+        turnSubEl.textContent = "Distance-based fake GPS through live pipeline";
+
+        const tick = () => {
+          handleProviderSimulatorPosition(
+            providerSimulatorPositionFromRouteDistance(
+              simulatorRoutePoints,
+              metrics,
+              traveledMeters
+            )
+          );
+
+          traveledMeters += metersPerTick;
+
+          if (traveledMeters >= metrics.totalMeters) {
+            handleProviderSimulatorPosition(
+              providerSimulatorPositionFromRouteDistance(
+                simulatorRoutePoints,
+                metrics,
+                metrics.totalMeters
+              )
+            );
+
+            clearInterval(window.__gigchatProviderRouteSimulatorTimer);
+            window.__gigchatProviderRouteSimulatorTimer = null;
+            setStatus("Simulator complete. Refresh to run again.");
+          }
+        };
+
+        tick();
+        window.__gigchatProviderRouteSimulatorTimer = setInterval(tick, tickMs);
+      } catch (err) {
+        console.warn("PROVIDER ROUTE SIMULATOR FAILED:", err);
+        const message = err && err.message ? err.message : String(err || "Unknown error");
+        setStatus("Simulator failed: " + message.slice(0, 120));
+      }
+    }
+
+    async function sendProviderLocationPing(position) {
+      const coords = position.coords || {};
+
+      const res = await fetch(API_BASE + "?task=provider_location_ping", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token: currentToken,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Could not send live ETA.");
+      }
+
+      return data;
+    }
+
+    async function handlePosition(position, forcePing) {
+      const coords = position.coords || {};
+
+      if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
+        throw new Error("Invalid provider location.");
+      }
+
+      updateProviderSpeedDebug(coords);
+          updateLiveHeadingFromCoords(coords);
+          updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+
+      const now = Date.now();
+      const shouldPing = forcePing || now - lastPingAt >= 30000;
+
+      if (!shouldPing) return;
+
+      lastPingAt = now;
+      setStatus("Updating live ETA...");
+
+      const eta = await sendProviderLocationPing(position);
+      updateEtaUI(eta);
+
+      const routeLoaded = drawEncodedRoute(eta && eta.encoded_polyline);
+      updateProviderSpeedDebug(coords);
+          updateLiveHeadingFromCoords(coords);
+          updateProviderCamera(coords.latitude, coords.longitude, coords.accuracy);
+
+      if (routeLoaded && eta && eta.customer_notified) {
+        setStatus("Route loaded. Customer notified.");
+      } else if (routeLoaded) {
+        setStatus("Route loaded.");
+      } else {
+        setStatus("Waiting for 3D route.");
+      }
+    }
+
+    async function startLiveNavigation() {
+      navBtn.disabled = true;
+      navBtn.textContent = "Starting...";
+      setStatus("Requesting location permission...");
+
+      try {
+        followProvider = true;
+        if (screenEl) screenEl.classList.add("live");
+        await requestWakeLock();
+
+        const position = await getProviderPosition();
+        await handlePosition(position, true);
+
+        turnMainEl.textContent = "Live navigation active";
+        turnSubEl.textContent = "Keep this page open for live route";
+        navBtn.textContent = "Navigation on";
+        navBtn.disabled = true;
+
+        navigationVisibilityTracking = true;
+        await sendNavigationVisibilityAction("navigation_visible", false);
+        setStatus("Live ETA protected. Keep GigChat open.");
+
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+          async (nextPosition) => {
+            try {
+              await handlePosition(nextPosition, false);
+            } catch (err) {
+              console.warn("3D LIVE ETA UPDATE FAILED:", err);
+              setStatus("Live ETA paused. Checking again...");
+            }
+          },
+          (err) => {
+            console.warn("LOCATION WATCH FAILED:", err);
+            setStatus("Location permission is needed for live ETA.");
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 16000,
+            maximumAge: 8000,
+          }
+        );
+      } catch (err) {
+        console.warn("3D LIVE NAVIGATION START FAILED:", err);
+        navBtn.disabled = false;
+        navBtn.textContent = "Start";
+        const message = err && err.message ? err.message : String(err || "Unknown error");
+        setStatus("Navigation failed: " + message.slice(0, 140));
+      }
+    }
+
+    function recenter() {
+      followProvider = true;
+
+      if (lastProviderPoint) {
+        cameraToProvider(lastProviderPoint[0], lastProviderPoint[1], lastProviderPoint[2]);
+        return;
+      }
+
+      if (Number.isFinite(exactLat) && Number.isFinite(exactLng)) {
+        cameraToProvider(exactLng, exactLat, 0);
+      }
+    }
+
+    async function load() {
+      const token = getToken();
+      currentToken = token;
+
+      if (!token) {
+        throw new Error("Missing navigation token.");
+      }
+
+      const res = await fetch(
+        API_BASE + "?task=provider_job_data&token=" + encodeURIComponent(token)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok || !data.job) {
+        throw new Error(data.error || "Job not found.");
+      }
+
+      const job = data.job;
+
+      exactLat = Number(job.service_latitude);
+      exactLng = Number(job.service_longitude);
+
+      showProviderSpeedChipNow();
+
+      if (!Number.isFinite(exactLat) || !Number.isFinite(exactLng)) {
+        throw new Error("This job does not have map coordinates yet.");
+      }
+
+      createMap(exactLat, exactLng);
+      updateServiceAreaCircle(exactLng, exactLat);
+
+      navBtn.addEventListener("click", startLiveNavigation);
+      recenterBtn.addEventListener("click", recenter);
+
+      if (isProviderSimulatorEnabled()) {
+        setStatus("Simulator mode loading...");
+        setTimeout(startProviderRouteSimulator, 900);
+      } else {
+        setStatus("Tap Start when you are on the way.");
+      }
+    }
+
+    document.addEventListener("visibilitychange", async () => {
+      if (document.visibilityState === "visible" && wakeLock === null && watchId !== null) {
+        await requestWakeLock();
+      }
+    });
+
+    load().catch((err) => {
+      showError(err.message || "Something went wrong.");
+    });
+  </script>
+</body>
+</html>
