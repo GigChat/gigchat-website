@@ -1195,7 +1195,32 @@
       };
     }
 
+    function cleanMapboxLngLatPoint(point) {
+      // Mapbox Coordinate Guard v51
+      // Mapbox GL JS expects [longitude, latitude] with finite numeric values.
+      if (!Array.isArray(point) || point.length < 2) return null;
+
+      const lng = Number(point[0]);
+      const lat = Number(point[1]);
+
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+      if (lng < -180 || lng > 180) return null;
+      if (lat < -85.051129 || lat > 85.051129) return null;
+
+      return [lng, lat];
+    }
+
+    function sanitizeMapboxLngLatPoints(points) {
+      if (!Array.isArray(points)) return [];
+
+      return points
+        .map((point) => cleanMapboxLngLatPoint(point))
+        .filter(Boolean);
+    }
+
     function routeGeoJson(points) {
+      const cleanPoints = sanitizeMapboxLngLatPoints(points);
+
       return {
         type: "FeatureCollection",
         features: [{
@@ -1203,7 +1228,7 @@
           properties: {},
           geometry: {
             type: "LineString",
-            coordinates: points,
+            coordinates: cleanPoints,
           },
         }],
       };
@@ -2262,6 +2287,12 @@
     function setProviderMarker(lng, lat, bearing) {
       if (!map) return;
 
+      const markerPoint = cleanMapboxLngLatPoint([lng, lat]);
+      if (!markerPoint) return;
+
+      lng = markerPoint[0];
+      lat = markerPoint[1];
+
       if (!providerMarker) {
         const el = document.createElement("div");
         el.className = "nav-arrow-marker";
@@ -2285,6 +2316,12 @@
 
     function cameraToProvider(lng, lat, bearing) {
       if (!map) return;
+
+      const centerPoint = cleanMapboxLngLatPoint([lng, lat]);
+      if (!centerPoint) return;
+
+      lng = centerPoint[0];
+      lat = centerPoint[1];
 
       map.easeTo({
         center: [lng, lat],
@@ -2673,6 +2710,12 @@
       if (initialCameraAligned) return;
       if (!map || !map.jumpTo) return;
 
+      const centerPoint = cleanMapboxLngLatPoint([lng, lat]);
+      if (!centerPoint) return;
+
+      lng = centerPoint[0];
+      lat = centerPoint[1];
+
       const center = [Number(lng), Number(lat)];
       const routeBearing = Number(bearing);
 
@@ -2849,9 +2892,20 @@
         lookT
       );
 
-      const bearing = bearingBetweenLngLat(current, lookAhead);
+      const cleanCurrent = cleanMapboxLngLatPoint(current);
+      const cleanLookAhead = cleanMapboxLngLatPoint(lookAhead);
 
-      return [current[0], current[1], bearing];
+      if (!cleanCurrent || !cleanLookAhead) {
+        return null;
+      }
+
+      const bearing = bearingBetweenLngLat(cleanCurrent, cleanLookAhead);
+
+      return [
+        cleanCurrent[0],
+        cleanCurrent[1],
+        Number.isFinite(Number(bearing)) ? bearing : 0,
+      ];
     }
 
     function providerSimulatorPositionFromRouteDistance(points, metrics, meters) {
@@ -2879,9 +2933,17 @@
       // Provider Route Simulator v41
       const coords = position && position.coords ? position.coords : {};
 
-      if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
+      const simulatorPoint = cleanMapboxLngLatPoint([
+        coords.longitude,
+        coords.latitude,
+      ]);
+
+      if (!simulatorPoint) {
         return;
       }
+
+      coords.longitude = simulatorPoint[0];
+      coords.latitude = simulatorPoint[1];
 
       updateProviderSpeedDebug(coords);
       updateLiveHeadingFromCoords(coords);
@@ -2940,7 +3002,7 @@
           return;
         }
 
-        const simulatorRoutePoints = fullRouteLinePoints.filter((point) => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
+        const simulatorRoutePoints = sanitizeMapboxLngLatPoints(fullRouteLinePoints);
         const metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
 
         if (!Number.isFinite(metrics.totalMeters) || metrics.totalMeters < 10) {
