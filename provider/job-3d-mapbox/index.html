@@ -1327,6 +1327,92 @@
       });
     }
 
+    function addGigChat3DBuildings() {
+      // Mapbox 3D Buildings v54
+      // Adds low/high building extrusions without touching provider arrow, camera, or route logic.
+      if (!map || !map.getStyle || !map.getStyle()) return false;
+      if (map.getLayer("gigchat-3d-buildings")) return true;
+
+      const style = map.getStyle();
+      const sources = style.sources || {};
+      const sourceCandidates = [
+        "composite",
+        ...Object.keys(sources).filter((id) => {
+          return sources[id] && sources[id].type === "vector" && id !== "composite";
+        }),
+      ].filter((id, index, list) => id && list.indexOf(id) === index && map.getSource(id));
+
+      const layers = style.layers || [];
+      const firstSymbolLayer = layers.find((layer) => {
+        return (
+          layer &&
+          layer.type === "symbol" &&
+          layer.layout &&
+          layer.layout["text-field"]
+        );
+      });
+
+      const beforeLayerId = firstSymbolLayer ? firstSymbolLayer.id : undefined;
+
+      const buildingLayer = {
+        id: "gigchat-3d-buildings",
+        type: "fill-extrusion",
+        source: "",
+        "source-layer": "building",
+        minzoom: 15,
+        paint: {
+          "fill-extrusion-color": [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "height"], 10],
+            0,
+            "#263442",
+            40,
+            "#425367",
+            120,
+            "#6d7d90"
+          ],
+          "fill-extrusion-height": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            15,
+            0,
+            16,
+            ["max", 7, ["to-number", ["get", "height"], 10]]
+          ],
+          "fill-extrusion-base": [
+            "max",
+            0,
+            ["to-number", ["get", "min_height"], 0]
+          ],
+          "fill-extrusion-opacity": 0.62,
+          "fill-extrusion-vertical-gradient": true
+        },
+      };
+
+      let lastError = null;
+
+      for (const sourceId of sourceCandidates) {
+        try {
+          map.addLayer(
+            {
+              ...buildingLayer,
+              source: sourceId,
+            },
+            beforeLayerId
+          );
+
+          return true;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      console.warn("3D BUILDINGS UNAVAILABLE:", lastError);
+      return false;
+    }
+
     function createMap(lat, lng) {
       map = new mapboxgl.Map({
         container: "map",
@@ -1356,6 +1442,7 @@
 
       map.on("load", () => {
         tuneGigChatVectorMapStyle();
+        addGigChat3DBuildings();
         map.addSource("route", {
           type: "geojson",
           data: emptyRoute(),
