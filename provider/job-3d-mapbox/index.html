@@ -91,10 +91,14 @@
       }
     }
 
+    #etaChip {
+      display: none !important;
+    }
+
     .navigation-health-monitor {
       position: absolute;
       left: 12px;
-      bottom: 92px;
+      bottom: 260px;
       z-index: 50;
       display: none;
       width: min(260px, calc(100vw - 24px));
@@ -1030,8 +1034,8 @@
         healthPageEl.textContent =
           document.visibilityState === "visible"
             ? navigator.onLine
-              ? "Visible Â· online"
-              : "Visible Â· offline"
+              ? "Visible / online"
+              : "Visible / offline"
             : "Hidden";
       }
     }
