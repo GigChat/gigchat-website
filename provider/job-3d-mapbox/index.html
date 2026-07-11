@@ -91,6 +91,54 @@
       }
     }
 
+    .navigation-health-monitor {
+      position: absolute;
+      left: 12px;
+      bottom: 92px;
+      z-index: 50;
+      display: none;
+      width: min(260px, calc(100vw - 24px));
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 14px;
+      background: rgba(5, 10, 16, 0.88);
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 11px;
+      line-height: 1.45;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      pointer-events: none;
+    }
+
+    .navigation-health-monitor.visible {
+      display: block;
+    }
+
+    .navigation-health-title {
+      margin-bottom: 5px;
+      color: #39ff14;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .navigation-health-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .navigation-health-label {
+      color: rgba(255, 255, 255, 0.56);
+    }
+
+    .navigation-health-value {
+      text-align: right;
+      font-weight: 750;
+    }
+
     #map {
       position: absolute;
       inset: 0;
@@ -667,6 +715,35 @@
 <body>
   <main class="screen">
     <div id="map"></div>
+
+    <div id="navigationHealthMonitor" class="navigation-health-monitor">
+      <div class="navigation-health-title">Navigation health</div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">GPS</span>
+        <span id="healthGps" class="navigation-health-value">Waiting</span>
+      </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">ETA</span>
+        <span id="healthEta" class="navigation-health-value">Waiting</span>
+      </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">Map Match</span>
+        <span id="healthMapMatch" class="navigation-health-value">Waiting</span>
+      </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">Watcher</span>
+        <span id="healthWatcher" class="navigation-health-value">Inactive</span>
+      </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">Page</span>
+        <span id="healthPage" class="navigation-health-value">Visible</span>
+      </div>
+    </div>
     <div id="trafficRouteIndicator" class="traffic-route-indicator">
       Traffic route active
     </div>
@@ -745,6 +822,14 @@
     const recenterBtn = document.getElementById("recenterBtn");
     const screenEl = document.querySelector(".screen");
 
+    const navigationHealthMonitorEl =
+      document.getElementById("navigationHealthMonitor");
+    const healthGpsEl = document.getElementById("healthGps");
+    const healthEtaEl = document.getElementById("healthEta");
+    const healthMapMatchEl = document.getElementById("healthMapMatch");
+    const healthWatcherEl = document.getElementById("healthWatcher");
+    const healthPageEl = document.getElementById("healthPage");
+
     let navigationVisibilityTracking = false;
     let lastNavigationVisibilityAction = "";
     let lastNavigationVisibilityActionAt = 0;
@@ -774,6 +859,22 @@
     let routePoints = [];
     let watchId = null;
     let lastPingAt = 0;
+
+    // Navigation Health Monitor v65
+    const navigationHealthUrl = new URL(window.location.href);
+    const navigationHealthDebugEnabled =
+      navigationHealthUrl.searchParams.get("debug") === "1";
+
+    const NAVIGATION_GPS_STALE_MS = 30000;
+    const NAVIGATION_RECOVERY_COOLDOWN_MS = 18000;
+    const NAVIGATION_HEALTH_REFRESH_MS = 3000;
+
+    let navigationLastGpsAt = 0;
+    let navigationLastEtaAt = 0;
+    let navigationLastMapMatchAt = 0;
+    let navigationMapMatchStatus = "Waiting";
+    let navigationLastRecoveryAt = 0;
+    let navigationRecoveryInFlight = false;
     let followProvider = false;
     let wakeLock = null;
     let lastProviderPoint = null;
@@ -858,6 +959,101 @@
 
       const parts = window.location.pathname.split("/").filter(Boolean);
       return parts[parts.length - 1] || "";
+    }
+
+    function navigationHealthAgeText(timestamp) {
+      const value = Number(timestamp);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        return "Waiting";
+      }
+
+      const seconds = Math.max(
+        0,
+        Math.round((Date.now() - value) / 1000)
+      );
+
+      if (seconds <= 2) return "Live";
+      return `${seconds}s ago`;
+    }
+
+    function updateNavigationHealthMonitor() {
+      // Navigation Health Monitor v65
+      if (!navigationHealthMonitorEl) return;
+
+      navigationHealthMonitorEl.classList.toggle(
+        "visible",
+        navigationHealthDebugEnabled
+      );
+
+      if (!navigationHealthDebugEnabled) return;
+
+      const gpsAge = navigationLastGpsAt
+        ? Date.now() - navigationLastGpsAt
+        : Infinity;
+
+      if (healthGpsEl) {
+        healthGpsEl.textContent =
+          gpsAge <= NAVIGATION_GPS_STALE_MS
+            ? navigationHealthAgeText(navigationLastGpsAt)
+            : navigationLastGpsAt
+              ? `Delayed ${Math.round(gpsAge / 1000)}s`
+              : "Waiting";
+      }
+
+      if (healthEtaEl) {
+        healthEtaEl.textContent =
+          navigationHealthAgeText(navigationLastEtaAt);
+      }
+
+      if (healthMapMatchEl) {
+        const age = navigationLastMapMatchAt
+          ? navigationHealthAgeText(navigationLastMapMatchAt)
+          : "";
+
+        healthMapMatchEl.textContent =
+          age && navigationMapMatchStatus === "Matched"
+            ? `Matched Â· ${age}`
+            : navigationMapMatchStatus;
+      }
+
+      if (healthWatcherEl) {
+        healthWatcherEl.textContent =
+          navigationRecoveryInFlight
+            ? "Restarting"
+            : watchId !== null
+              ? "Active"
+              : "Inactive";
+      }
+
+      if (healthPageEl) {
+        healthPageEl.textContent =
+          document.visibilityState === "visible"
+            ? navigator.onLine
+              ? "Visible Â· online"
+              : "Visible Â· offline"
+            : "Hidden";
+      }
+    }
+
+    function markNavigationGpsHealth() {
+      navigationLastGpsAt = Date.now();
+      updateNavigationHealthMonitor();
+    }
+
+    function markNavigationEtaHealth() {
+      navigationLastEtaAt = Date.now();
+      updateNavigationHealthMonitor();
+    }
+
+    function markNavigationMapMatchHealth(status) {
+      navigationMapMatchStatus = String(status || "Waiting");
+
+      if (navigationMapMatchStatus === "Matched") {
+        navigationLastMapMatchAt = Date.now();
+      }
+
+      updateNavigationHealthMonitor();
     }
 
     function setTrafficRouteIndicator(message, checking = false) {
@@ -3730,6 +3926,8 @@
           return position;
         }
 
+        markNavigationMapMatchHealth("Matched");
+
         return buildProviderMatchedPosition(
           position,
           matchedLatitude,
@@ -3740,6 +3938,8 @@
           "PROVIDER MAP MATCHING FAILED:",
           err
         );
+
+        markNavigationMapMatchHealth("Fallback GPS");
 
         return position;
       } finally {
@@ -3769,6 +3969,8 @@
         throw new Error(data.error || "Could not send live ETA.");
       }
 
+      markNavigationEtaHealth();
+
       return data;
     }
 
@@ -3782,6 +3984,8 @@
       ) {
         throw new Error("Invalid provider location.");
       }
+
+      markNavigationGpsHealth();
 
       // Speed and heading continue using the original phone GPS.
       updateProviderSpeedDebug(rawCoords);
@@ -3846,6 +4050,115 @@
       }
     }
 
+    function startProviderLocationWatch(reason = "manual") {
+      // Navigation Auto Recovery v65
+      if (isProviderSimulatorEnabled()) return false;
+      if (!navigator.geolocation) return false;
+
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+
+      watchId = navigator.geolocation.watchPosition(
+        async (nextPosition) => {
+          markNavigationGpsHealth();
+
+          try {
+            await handlePosition(nextPosition, false);
+          } catch (err) {
+            console.warn("3D LIVE ETA UPDATE FAILED:", err);
+            setStatus("Live ETA paused. Checking again...");
+          }
+        },
+        (err) => {
+          console.warn("LOCATION WATCH FAILED:", err);
+
+          if (err && Number(err.code) === 1) {
+            setStatus("Location permission is needed for live ETA.");
+          } else {
+            setStatus("GPS delayed. Reconnecting...");
+          }
+
+          updateNavigationHealthMonitor();
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 16000,
+          maximumAge: 8000,
+        }
+      );
+
+      console.log(
+        "GigChat provider location watcher started:",
+        reason,
+        watchId
+      );
+
+      updateNavigationHealthMonitor();
+      return true;
+    }
+
+    async function recoverProviderNavigation(reason = "health-check") {
+      if (!navigationVisibilityTracking) return false;
+      if (isProviderSimulatorEnabled()) return false;
+      if (document.visibilityState !== "visible") return false;
+      if (navigationRecoveryInFlight) return false;
+
+      const now = Date.now();
+
+      if (
+        now - navigationLastRecoveryAt <
+        NAVIGATION_RECOVERY_COOLDOWN_MS
+      ) {
+        return false;
+      }
+
+      navigationRecoveryInFlight = true;
+      navigationLastRecoveryAt = now;
+      updateNavigationHealthMonitor();
+
+      try {
+        setStatus("Reconnecting live navigation...");
+        await requestWakeLock();
+
+        const position = await getProviderPosition();
+        markNavigationGpsHealth();
+        await handlePosition(position, false);
+
+        startProviderLocationWatch(reason);
+        setStatus("Live navigation restored.");
+
+        return true;
+      } catch (err) {
+        console.warn("NAVIGATION AUTO RECOVERY FAILED:", err);
+        setStatus("GPS delayed. Retrying automatically...");
+        return false;
+      } finally {
+        navigationRecoveryInFlight = false;
+        updateNavigationHealthMonitor();
+      }
+    }
+
+    function runNavigationHealthCheck() {
+      updateNavigationHealthMonitor();
+
+      if (!navigationVisibilityTracking) return;
+      if (isProviderSimulatorEnabled()) return;
+      if (document.visibilityState !== "visible") return;
+
+      const gpsAge = navigationLastGpsAt
+        ? Date.now() - navigationLastGpsAt
+        : Infinity;
+
+      if (
+        gpsAge > NAVIGATION_GPS_STALE_MS &&
+        !navigationRecoveryInFlight
+      ) {
+        recoverProviderNavigation("gps-stale");
+      }
+    }
+
     async function startLiveNavigation() {
       navBtn.disabled = true;
       navBtn.textContent = "Starting...";
@@ -3868,29 +4181,7 @@
         await sendNavigationVisibilityAction("navigation_visible", false);
         setStatus("Live ETA protected. Keep GigChat open.");
 
-        if (watchId !== null) {
-          navigator.geolocation.clearWatch(watchId);
-        }
-
-        watchId = navigator.geolocation.watchPosition(
-          async (nextPosition) => {
-            try {
-              await handlePosition(nextPosition, false);
-            } catch (err) {
-              console.warn("3D LIVE ETA UPDATE FAILED:", err);
-              setStatus("Live ETA paused. Checking again...");
-            }
-          },
-          (err) => {
-            console.warn("LOCATION WATCH FAILED:", err);
-            setStatus("Location permission is needed for live ETA.");
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 16000,
-            maximumAge: 8000,
-          }
-        );
+        startProviderLocationWatch("navigation-start");
       } catch (err) {
         console.warn("3D LIVE NAVIGATION START FAILED:", err);
         navBtn.disabled = false;
@@ -3957,10 +4248,50 @@
     }
 
     document.addEventListener("visibilitychange", async () => {
-      if (document.visibilityState === "visible" && wakeLock === null && watchId !== null) {
+      updateNavigationHealthMonitor();
+
+      if (document.visibilityState !== "visible") return;
+
+      if (wakeLock === null && watchId !== null) {
         await requestWakeLock();
       }
+
+      if (navigationVisibilityTracking) {
+        setTimeout(() => {
+          recoverProviderNavigation("page-visible");
+        }, 500);
+      }
     });
+
+    window.addEventListener("pageshow", () => {
+      updateNavigationHealthMonitor();
+
+      if (navigationVisibilityTracking) {
+        setTimeout(() => {
+          recoverProviderNavigation("pageshow");
+        }, 500);
+      }
+    });
+
+    window.addEventListener("online", () => {
+      updateNavigationHealthMonitor();
+
+      if (navigationVisibilityTracking) {
+        recoverProviderNavigation("network-online");
+      }
+    });
+
+    window.addEventListener("offline", () => {
+      setStatus("Internet connection lost. Navigation will reconnect.");
+      updateNavigationHealthMonitor();
+    });
+
+    setInterval(
+      runNavigationHealthCheck,
+      NAVIGATION_HEALTH_REFRESH_MS
+    );
+
+    updateNavigationHealthMonitor();
 
     load().catch((err) => {
       showError(err.message || "Something went wrong.");
