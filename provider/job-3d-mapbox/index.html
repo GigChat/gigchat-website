@@ -95,10 +95,20 @@
       display: none !important;
     }
 
+    /* Navigation Health Layout v67 */
+    .eta-chip {
+      display: none !important;
+    }
+
+    .navigation-health-monitor {
+      left: 14px;
+
+    }
+
     .navigation-health-monitor {
       position: absolute;
       left: 12px;
-      bottom: 260px;
+
       z-index: 50;
       display: none;
       width: min(260px, calc(100vw - 24px));
@@ -825,6 +835,7 @@
     const turnSubEl = document.getElementById("turnSub");
     const recenterBtn = document.getElementById("recenterBtn");
     const screenEl = document.querySelector(".screen");
+    const bottomSheetEl = document.querySelector(".bottom-sheet");
 
     const navigationHealthMonitorEl =
       document.getElementById("navigationHealthMonitor");
@@ -981,9 +992,33 @@
       return `${seconds}s ago`;
     }
 
+    function positionNavigationHealthMonitor() {
+      // Navigation Health Layout v67
+      if (
+        !navigationHealthMonitorEl ||
+        !bottomSheetEl ||
+        !screenEl
+      ) {
+        return;
+      }
+
+      const screenRect = screenEl.getBoundingClientRect();
+      const sheetRect = bottomSheetEl.getBoundingClientRect();
+
+      const bottomDistance = Math.max(
+        8,
+        screenRect.bottom - sheetRect.top + 8
+      );
+
+      navigationHealthMonitorEl.style.bottom =
+        `${Math.round(bottomDistance)}px`;
+    }
+
     function updateNavigationHealthMonitor() {
       // Navigation Health Monitor v65
       if (!navigationHealthMonitorEl) return;
+
+      positionNavigationHealthMonitor();
 
       navigationHealthMonitorEl.classList.toggle(
         "visible",
@@ -4294,6 +4329,14 @@
       runNavigationHealthCheck,
       NAVIGATION_HEALTH_REFRESH_MS
     );
+
+    window.addEventListener("resize", () => {
+      positionNavigationHealthMonitor();
+    });
+
+    window.addEventListener("orientationchange", () => {
+      setTimeout(positionNavigationHealthMonitor, 250);
+    });
 
     updateNavigationHealthMonitor();
 
