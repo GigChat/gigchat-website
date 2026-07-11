@@ -111,10 +111,11 @@
 
       z-index: 50;
       display: none;
-      width: min(260px, calc(100vw - 24px));
-      padding: 10px 12px;
+      width: 250px;
+      max-width: calc(100vw - 28px);
+      padding: 11px 13px;
       border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 14px;
+      border-radius: 16px;
       background: rgba(5, 10, 16, 0.88);
       color: rgba(255, 255, 255, 0.92);
       font-size: 11px;
@@ -142,6 +143,7 @@
       display: flex;
       justify-content: space-between;
       gap: 10px;
+      min-height: 17px;
     }
 
     .navigation-health-label {
@@ -757,6 +759,21 @@
         <span class="navigation-health-label">Page</span>
         <span id="healthPage" class="navigation-health-value">Visible</span>
       </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">Resume</span>
+        <span id="healthResume" class="navigation-health-value">None</span>
+      </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">Recovery</span>
+        <span id="healthRecovery" class="navigation-health-value">None</span>
+      </div>
+
+      <div class="navigation-health-row">
+        <span class="navigation-health-label">Restarts</span>
+        <span id="healthRestarts" class="navigation-health-value">0</span>
+      </div>
     </div>
     <div id="trafficRouteIndicator" class="traffic-route-indicator">
       Traffic route active
@@ -844,6 +861,9 @@
     const healthMapMatchEl = document.getElementById("healthMapMatch");
     const healthWatcherEl = document.getElementById("healthWatcher");
     const healthPageEl = document.getElementById("healthPage");
+    const healthResumeEl = document.getElementById("healthResume");
+    const healthRecoveryEl = document.getElementById("healthRecovery");
+    const healthRestartsEl = document.getElementById("healthRestarts");
 
     let navigationVisibilityTracking = false;
     let lastNavigationVisibilityAction = "";
@@ -890,6 +910,11 @@
     let navigationMapMatchStatus = "Waiting";
     let navigationLastRecoveryAt = 0;
     let navigationRecoveryInFlight = false;
+
+    // Navigation Recovery Proof v68
+    let navigationLastResumeAt = 0;
+    let navigationLastRecoveryReason = "None";
+    let navigationRecoveryRestartCount = 0;
     let followProvider = false;
     let wakeLock = null;
     let lastProviderPoint = null;
@@ -1072,6 +1097,23 @@
               ? "Visible / online"
               : "Visible / offline"
             : "Hidden";
+      }
+
+      if (healthResumeEl) {
+        healthResumeEl.textContent =
+          navigationLastResumeAt
+            ? navigationHealthAgeText(navigationLastResumeAt)
+            : "None";
+      }
+
+      if (healthRecoveryEl) {
+        healthRecoveryEl.textContent =
+          navigationLastRecoveryReason || "None";
+      }
+
+      if (healthRestartsEl) {
+        healthRestartsEl.textContent =
+          String(navigationRecoveryRestartCount);
       }
     }
 
@@ -4155,17 +4197,21 @@
 
       navigationRecoveryInFlight = true;
       navigationLastRecoveryAt = now;
+      navigationLastRecoveryReason = String(reason || "health-check");
+      navigationRecoveryRestartCount += 1;
       updateNavigationHealthMonitor();
 
       try {
         setStatus("Reconnecting live navigation...");
         await requestWakeLock();
 
+        startProviderLocationWatch(reason);
+        updateNavigationHealthMonitor();
+
         const position = await getProviderPosition();
         markNavigationGpsHealth();
         await handlePosition(position, false);
 
-        startProviderLocationWatch(reason);
         setStatus("Live navigation restored.");
 
         return true;
@@ -4291,6 +4337,10 @@
 
       if (document.visibilityState !== "visible") return;
 
+      navigationLastResumeAt = Date.now();
+      navigationLastRecoveryReason = "page-visible";
+      updateNavigationHealthMonitor();
+
       if (wakeLock === null && watchId !== null) {
         await requestWakeLock();
       }
@@ -4303,6 +4353,15 @@
     });
 
     window.addEventListener("pageshow", () => {
+      navigationLastResumeAt = Date.now();
+
+      if (
+        !navigationLastRecoveryReason ||
+        navigationLastRecoveryReason === "None"
+      ) {
+        navigationLastRecoveryReason = "pageshow";
+      }
+
       updateNavigationHealthMonitor();
 
       if (navigationVisibilityTracking) {
