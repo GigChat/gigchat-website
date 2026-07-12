@@ -1412,7 +1412,13 @@
       }
 
       if (isProviderSimulatorEnabled()) {
-        return false;
+        const simulatorUrl = new URL(window.location.href);
+        const arrivalTestEnabled =
+          simulatorUrl.searchParams.get("test_arrival") === "1";
+
+        if (!arrivalTestEnabled) {
+          return false;
+        }
       }
 
       if (
