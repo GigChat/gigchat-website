@@ -3703,6 +3703,8 @@
       coords.longitude = lng;
       coords.heading = bearing;
 
+      checkProviderArrival([lng, lat], coords.accuracy);
+
       updateProviderSpeedDebug(coords);
       updateLiveHeadingFromCoords(coords);
 
