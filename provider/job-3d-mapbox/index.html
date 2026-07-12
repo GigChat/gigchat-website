@@ -936,6 +936,14 @@
 
     const SERVICE_AREA_RADIUS_METERS = 60;
 
+    // Provider Arrival Geofence v68
+    let providerArrivalActionSent = false;
+    let providerArrivalActionInFlight = false;
+    let providerArrivalLastAttemptAt = 0;
+
+    const PROVIDER_ARRIVAL_RETRY_MS = 15000;
+    const PROVIDER_ARRIVAL_MAX_ACCURACY_METERS = 80;
+
     // GPS Navigation Meter v21
     let navigationRouteSteps = [];
     let navigationRouteStepsSignature = "";
@@ -1396,6 +1404,107 @@
       }
     }
 
+    async function checkProviderArrival(rawPoint, accuracy = null) {
+      // Provider Arrival Geofence v68
+      // Frontend detects circle entry; backend guarantees one message only.
+      if (providerArrivalActionSent || providerArrivalActionInFlight) {
+        return false;
+      }
+
+      if (isProviderSimulatorEnabled()) {
+        return false;
+      }
+
+      if (
+        !currentToken ||
+        !Array.isArray(rawPoint) ||
+        rawPoint.length < 2 ||
+        !Array.isArray(serviceAreaLngLat) ||
+        serviceAreaLngLat.length < 2
+      ) {
+        return false;
+      }
+
+      const gpsAccuracy = Number(accuracy);
+
+      if (
+        Number.isFinite(gpsAccuracy) &&
+        gpsAccuracy > PROVIDER_ARRIVAL_MAX_ACCURACY_METERS
+      ) {
+        return false;
+      }
+
+      const distanceToDestination = distanceMetersBetweenLngLat(
+        rawPoint,
+        serviceAreaLngLat
+      );
+
+      if (
+        !Number.isFinite(distanceToDestination) ||
+        distanceToDestination > SERVICE_AREA_RADIUS_METERS
+      ) {
+        return false;
+      }
+
+      const now = Date.now();
+
+      if (
+        now - providerArrivalLastAttemptAt <
+        PROVIDER_ARRIVAL_RETRY_MS
+      ) {
+        return false;
+      }
+
+      providerArrivalActionInFlight = true;
+      providerArrivalLastAttemptAt = now;
+
+      try {
+        const res = await fetch(
+          API_BASE + "?task=provider_action",
+          {
+            method: "POST",
+            keepalive: true,
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token: currentToken,
+              action: "provider_arrived",
+            }),
+          }
+        );
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(
+            data.error || "Could not register provider arrival."
+          );
+        }
+
+        const status = String(data.status || "");
+
+        if (
+          status === "start_prompt_sent" ||
+          status === "start_prompt_already_sent" ||
+          status === "service_already_started_or_completed"
+        ) {
+          providerArrivalActionSent = true;
+        }
+
+        console.log("GIGCHAT PROVIDER ARRIVAL:", {
+          distanceMeters: Math.round(distanceToDestination),
+          status,
+        });
+
+        return providerArrivalActionSent;
+      } catch (err) {
+        console.warn("PROVIDER ARRIVAL ACTION FAILED:", err);
+        return false;
+      } finally {
+        providerArrivalActionInFlight = false;
+      }
+    }
     document.addEventListener("visibilitychange", () => {
       if (!navigationVisibilityTracking) return;
 
@@ -3333,6 +3442,8 @@
 
       const rawPoint = [lng, lat];
       const now = Date.now();
+
+      checkProviderArrival(rawPoint, gpsAccuracy);
 
       if (lastAcceptedGpsLngLat) {
         const movedMeters = distanceMetersBetweenLngLat(lastAcceptedGpsLngLat, rawPoint);
