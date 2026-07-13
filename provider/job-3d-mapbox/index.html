@@ -890,7 +890,7 @@
       if (healthTitleEl) {
         healthTitleEl.textContent = providerText(
           "Navigation health",
-          "Estado de navegaciÃ³n"
+          "Estado de navegaci\u00f3n"
         );
       }
 
@@ -903,9 +903,9 @@
             "Tiempo estimado",
             "Ajuste al mapa",
             "Seguimiento",
-            "PÃ¡gina",
-            "ReanudaciÃ³n",
-            "RecuperaciÃ³n",
+            "P\u00e1gina",
+            "Reanudaci\u00f3n",
+            "Recuperaci\u00f3n",
             "Reinicios",
           ]
         : [
@@ -928,7 +928,7 @@
       if (trafficRouteIndicatorEl) {
         trafficRouteIndicatorEl.textContent = providerText(
           "Traffic route active",
-          "Ruta con trÃ¡fico activa"
+          "Ruta con tr\u00e1fico activa"
         );
       }
 
@@ -938,7 +938,7 @@
       if (topNavigationLabel) {
         topNavigationLabel.textContent = providerText(
           "Navigation",
-          "NavegaciÃ³n"
+          "Navegaci\u00f3n"
         );
       }
 
@@ -973,7 +973,7 @@
       if (gpsSubEl) {
         gpsSubEl.textContent = providerText(
           "GigChat will show the next turn here",
-          "GigChat mostrarÃ¡ aquÃ­ el prÃ³ximo giro"
+          "GigChat mostrar\u00e1 aqu\u00ed el pr\u00f3ximo giro"
         );
       }
 
@@ -987,7 +987,7 @@
       if (distanceMainEl) {
         distanceMainEl.textContent = providerText(
           "Secure navigation",
-          "NavegaciÃ³n segura"
+          "Navegaci\u00f3n segura"
         );
       }
 
@@ -1690,13 +1690,13 @@
       if (!navigationVisibilityTracking) return;
 
       if (document.visibilityState === "hidden") {
-        setStatus("Navigation paused. Reopen map for live ETA.");
+        setStatus(providerText("Navigation paused. Reopen map for live ETA.", "Navegaci\u00f3n en pausa. Abre nuevamente el mapa para recuperar el tiempo estimado en vivo."));
         sendNavigationVisibilityAction("navigation_hidden", true);
         return;
       }
 
       if (document.visibilityState === "visible") {
-        setStatus("Navigation resumed.");
+        setStatus(providerText("Navigation resumed.", "Navegaci\u00f3n reanudada."));
         sendNavigationVisibilityAction("navigation_resumed", false);
 
         if (typeof restoreScreenWakeLockIfNeeded === "function") {
@@ -3963,10 +3963,10 @@
       if (screenEl) screenEl.classList.add("live");
 
       navBtn.disabled = true;
-      navBtn.textContent = "Simulator on";
+      navBtn.textContent = providerText("Simulator on", "Simulador activo");
       turnMainEl.textContent = "Simulator mode active";
       turnSubEl.textContent = "Loading real route through live pipeline";
-      setStatus("Simulator loading real route...");
+      setStatus(providerText("Simulator loading real route...", "El simulador est\u00e1 cargando la ruta real..."));
 
       try {
         const eta = await sendProviderLocationPing(
@@ -4011,7 +4011,7 @@
         let traveledMeters = 0;
         let lastRerouteCheckAt = 0;
 
-        setStatus("Simulator following route by distance. No GPS permission needed.");
+        setStatus(providerText("Simulator following route by distance. No GPS permission needed.", "El simulador est\u00e1 siguiendo la ruta por distancia. No necesita permiso de GPS."));
         turnSubEl.textContent = "Distance-based fake GPS through live pipeline";
 
         const checkMapboxReroute = async () => {
@@ -4124,7 +4124,7 @@
 
             clearInterval(window.__gigchatProviderRouteSimulatorTimer);
             window.__gigchatProviderRouteSimulatorTimer = null;
-            setStatus("Simulator complete. Refresh to run again.");
+            setStatus(providerText("Simulator complete. Refresh to run again.", "Simulaci\u00f3n completada. Actualiza la p\u00e1gina para repetirla."));
           }
         };
 
@@ -4388,7 +4388,7 @@
       if (!shouldPing) return;
 
       lastPingAt = now;
-      setStatus("Updating live ETA...");
+      setStatus(providerText("Updating live ETA...", "Actualizando tiempo estimado en vivo..."));
 
       // ETA and rerouting start from the road-matched position.
       const eta = await sendProviderLocationPing(
@@ -4419,9 +4419,9 @@
           "Route loaded. Customer notified."
         );
       } else if (routeLoaded) {
-        setStatus("Route loaded.");
+        setStatus(providerText("Route loaded.", "Ruta cargada."));
       } else {
-        setStatus("Waiting for 3D route.");
+        setStatus(providerText("Waiting for 3D route.", "Esperando ruta 3D."));
       }
     }
 
@@ -4443,16 +4443,16 @@
             await handlePosition(nextPosition, false);
           } catch (err) {
             console.warn("3D LIVE ETA UPDATE FAILED:", err);
-            setStatus("Live ETA paused. Checking again...");
+            setStatus(providerText("Live ETA paused. Checking again...", "Tiempo estimado en pausa. Verificando nuevamente..."));
           }
         },
         (err) => {
           console.warn("LOCATION WATCH FAILED:", err);
 
           if (err && Number(err.code) === 1) {
-            setStatus("Location permission is needed for live ETA.");
+            setStatus(providerText("Location permission is needed for live ETA.", "Se necesita permiso de ubicaci\u00f3n para el tiempo estimado en vivo."));
           } else {
-            setStatus("GPS delayed. Reconnecting...");
+            setStatus(providerText("GPS delayed. Reconnecting...", "GPS demorado. Reconectando..."));
           }
 
           updateNavigationHealthMonitor();
@@ -4496,7 +4496,7 @@
       updateNavigationHealthMonitor();
 
       try {
-        setStatus("Reconnecting live navigation...");
+        setStatus(providerText("Reconnecting live navigation...", "Reconectando navegaci\u00f3n en vivo..."));
         await requestWakeLock();
 
         startProviderLocationWatch(reason);
@@ -4506,12 +4506,12 @@
         markNavigationGpsHealth();
         await handlePosition(position, false);
 
-        setStatus("Live navigation restored.");
+        setStatus(providerText("Live navigation restored.", "Navegaci\u00f3n en vivo restablecida."));
 
         return true;
       } catch (err) {
         console.warn("NAVIGATION AUTO RECOVERY FAILED:", err);
-        setStatus("GPS delayed. Retrying automatically...");
+        setStatus(providerText("GPS delayed. Retrying automatically...", "GPS demorado. Reintentando autom\u00e1ticamente..."));
         return false;
       } finally {
         navigationRecoveryInFlight = false;
@@ -4540,8 +4540,8 @@
 
     async function startLiveNavigation() {
       navBtn.disabled = true;
-      navBtn.textContent = "Starting...";
-      setStatus("Requesting location permission...");
+      navBtn.textContent = providerText("Starting...", "Iniciando...");
+      setStatus(providerText("Requesting location permission...", "Solicitando permiso de ubicaci\u00f3n..."));
 
       try {
         followProvider = true;
@@ -4553,18 +4553,18 @@
 
         turnMainEl.textContent = "Live navigation active";
         turnSubEl.textContent = "Keep this page open for live route";
-        navBtn.textContent = "Navigation on";
+        navBtn.textContent = providerText("Navigation on", "Navegaci\u00f3n activa");
         navBtn.disabled = true;
 
         navigationVisibilityTracking = true;
         await sendNavigationVisibilityAction("navigation_visible", false);
-        setStatus("Live ETA protected. Keep GigChat open.");
+        setStatus(providerText("Live ETA protected. Keep GigChat open.", "Tiempo estimado protegido. Mant\u00e9n GigChat abierto."));
 
         startProviderLocationWatch("navigation-start");
       } catch (err) {
         console.warn("3D LIVE NAVIGATION START FAILED:", err);
         navBtn.disabled = false;
-        navBtn.textContent = "Start";
+        navBtn.textContent = providerText("Start", "Comenzar");
         const message = err && err.message ? err.message : String(err || "Unknown error");
         setStatus("Navigation failed: " + message.slice(0, 140));
       }
@@ -4628,10 +4628,10 @@
       recenterBtn.addEventListener("click", recenter);
 
       if (isProviderSimulatorEnabled()) {
-        setStatus("Simulator mode loading...");
+        setStatus(providerText("Simulator mode loading...", "Cargando modo simulador..."));
         setTimeout(startProviderRouteSimulator, 900);
       } else {
-        setStatus("Tap Start when you are on the way.");
+        setStatus(providerText("Tap Start when you are on the way.", "Toca Comenzar cuando est\u00e9s en camino."));
       }
     }
 
@@ -4683,7 +4683,7 @@
     });
 
     window.addEventListener("offline", () => {
-      setStatus("Internet connection lost. Navigation will reconnect.");
+      setStatus(providerText("Internet connection lost. Navigation will reconnect.", "Se perdi\u00f3 la conexi\u00f3n a internet. La navegaci\u00f3n se reconectar\u00e1."));
       updateNavigationHealthMonitor();
     });
 
