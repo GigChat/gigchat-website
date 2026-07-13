@@ -1391,7 +1391,7 @@
 
       if (lower.startsWith("head ")) {
         const onIndex = lower.indexOf(" on ");
-        return onIndex > 0 ? value.slice(0, onIndex).trim() : "Continue";
+        return onIndex > 0 ? value.slice(0, onIndex).trim() : providerText("Continue", "Continuar");
       }
 
       if (lower.startsWith("turn left")) return "Turn left";
@@ -1403,10 +1403,10 @@
       if (lower.startsWith("merge")) return "Merge";
       if (lower.startsWith("take the exit")) return "Take exit";
       if (lower.startsWith("at the roundabout")) return "Roundabout";
-      if (lower.startsWith("continue")) return "Continue";
+      if (lower.startsWith("continue")) return providerText("Continue", "Continuar");
       if (lower.startsWith("arrive")) return "Arrive";
 
-      return "Continue";
+      return providerText("Continue", "Continuar");
     }
 
     function extractStreetFromInstruction(clean) {
@@ -1767,7 +1767,7 @@
       }
 
       if (Number.isFinite(distance)) {
-        distanceMainEl.textContent = formatDistance(distance) + " remaining";
+        distanceMainEl.textContent = formatDistance(distance) + providerText(" remaining", " restantes");
       }
 
       updateGpsBanner(data);
@@ -2875,11 +2875,11 @@
       }
 
       if (instructionEl) {
-        instructionEl.textContent = street || "Continue";
+        instructionEl.textContent = street || providerText("Continue", "Continuar");
       }
 
       if (subEl) {
-        subEl.textContent = isTurnNow ? "Turn now" : action || "Continue";
+        subEl.textContent = isTurnNow ? providerText("Turn now", "Gira ahora") : action || providerText("Continue", "Continuar");
       }
     }
 
@@ -3470,9 +3470,17 @@
       chip.style.fontFamily = "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
       chip.style.textAlign = "right";
       chip.style.pointerEvents = "none";
-      chip.innerHTML = '<div style="font-size:11px;opacity:.65;letter-spacing:.04em;text-transform:uppercase;">Speed</div><div id="providerSpeedValue" style="font-size:22px;font-weight:800;line-height:1.05;">-- mph</div><div id="providerSpeedAccuracy" style="font-size:11px;opacity:.62;margin-top:3px;">GPS --</div>';
+      chip.innerHTML = '<div id="providerSpeedLabel" style="font-size:11px;opacity:.65;letter-spacing:.04em;text-transform:uppercase;"></div><div id="providerSpeedValue" style="font-size:22px;font-weight:800;line-height:1.05;">-- mph</div><div id="providerSpeedAccuracy" style="font-size:11px;opacity:.62;margin-top:3px;">GPS --</div>';
 
       document.body.appendChild(chip);
+      const speedLabelEl =
+        document.getElementById("providerSpeedLabel");
+
+      if (speedLabelEl) {
+        speedLabelEl.textContent =
+          providerText("Speed", "Velocidad");
+      }
+
       return chip;
     }
 
