@@ -872,6 +872,181 @@
     let currentToken = "";
     let exactLat = null;
     let exactLng = null;
+
+    // Provider Map Language v69
+    let providerLanguage = "en";
+
+    function providerText(en, es) {
+      return providerLanguage === "es" ? es : en;
+    }
+
+    function applyProviderMapLanguage() {
+      // Provider Map Language v69
+      document.documentElement.lang = providerLanguage;
+
+      const healthTitleEl =
+        document.querySelector(".navigation-health-title");
+
+      if (healthTitleEl) {
+        healthTitleEl.textContent = providerText(
+          "Navigation health",
+          "Estado de navegaciÃ³n"
+        );
+      }
+
+      const healthLabels =
+        document.querySelectorAll(".navigation-health-label");
+
+      const translatedHealthLabels = providerLanguage === "es"
+        ? [
+            "GPS",
+            "Tiempo estimado",
+            "Ajuste al mapa",
+            "Seguimiento",
+            "PÃ¡gina",
+            "ReanudaciÃ³n",
+            "RecuperaciÃ³n",
+            "Reinicios",
+          ]
+        : [
+            "GPS",
+            "ETA",
+            "Map Match",
+            "Watcher",
+            "Page",
+            "Resume",
+            "Recovery",
+            "Restarts",
+          ];
+
+      healthLabels.forEach((element, index) => {
+        if (translatedHealthLabels[index]) {
+          element.textContent = translatedHealthLabels[index];
+        }
+      });
+
+      if (trafficRouteIndicatorEl) {
+        trafficRouteIndicatorEl.textContent = providerText(
+          "Traffic route active",
+          "Ruta con trÃ¡fico activa"
+        );
+      }
+
+      const topNavigationLabel =
+        document.querySelector(".top-pill div:last-child");
+
+      if (topNavigationLabel) {
+        topNavigationLabel.textContent = providerText(
+          "Navigation",
+          "NavegaciÃ³n"
+        );
+      }
+
+      if (turnMainEl) {
+        turnMainEl.textContent = providerText(
+          "Ready to start",
+          "Listo para comenzar"
+        );
+      }
+
+      if (turnSubEl) {
+        turnSubEl.textContent = providerText(
+          "Live route inside GigChat",
+          "Ruta en vivo dentro de GigChat"
+        );
+      }
+
+      if (gpsDistanceEl) {
+        gpsDistanceEl.textContent = providerText(
+          "Waiting for route",
+          "Esperando ruta"
+        );
+      }
+
+      if (gpsInstructionEl) {
+        gpsInstructionEl.textContent = providerText(
+          "Start navigation",
+          "Iniciar navegaciÃ³n"
+        );
+      }
+
+      if (gpsSubEl) {
+        gpsSubEl.textContent = providerText(
+          "GigChat will show the next turn here",
+          "GigChat mostrarÃ¡ aquÃ­ el prÃ³ximo giro"
+        );
+      }
+
+      if (etaMainEl) {
+        etaMainEl.textContent = providerText(
+          "Ready",
+          "Listo"
+        );
+      }
+
+      if (distanceMainEl) {
+        distanceMainEl.textContent = providerText(
+          "Secure navigation",
+          "NavegaciÃ³n segura"
+        );
+      }
+
+      if (navBtn && !navigationVisibilityTracking) {
+        navBtn.textContent = providerText(
+          "Start",
+          "Comenzar"
+        );
+      }
+
+      if (healthGpsEl) {
+        healthGpsEl.textContent = providerText(
+          "Waiting",
+          "Esperando"
+        );
+      }
+
+      if (healthEtaEl) {
+        healthEtaEl.textContent = providerText(
+          "Waiting",
+          "Esperando"
+        );
+      }
+
+      if (healthMapMatchEl) {
+        healthMapMatchEl.textContent = providerText(
+          "Waiting",
+          "Esperando"
+        );
+      }
+
+      if (healthWatcherEl) {
+        healthWatcherEl.textContent = providerText(
+          "Inactive",
+          "Inactivo"
+        );
+      }
+
+      if (healthPageEl) {
+        healthPageEl.textContent = providerText(
+          "Visible",
+          "Visible"
+        );
+      }
+
+      if (healthResumeEl) {
+        healthResumeEl.textContent = providerText(
+          "None",
+          "Ninguna"
+        );
+      }
+
+      if (healthRecoveryEl) {
+        healthRecoveryEl.textContent = providerText(
+          "None",
+          "Ninguna"
+        );
+      }
+    }
     const mapboxTokenUrl = new URL(window.location.href);
     const shouldResetMapboxToken =
       mapboxTokenUrl.searchParams.get("reset_mapbox_token") === "1";
@@ -4427,6 +4602,15 @@
       }
 
       const job = data.job;
+
+      providerLanguage =
+        String(data.provider_language || "en")
+          .trim()
+          .toLowerCase() === "es"
+          ? "es"
+          : "en";
+
+      applyProviderMapLanguage();
 
       exactLat = Number(job.service_latitude);
       exactLng = Number(job.service_longitude);
