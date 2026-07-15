@@ -1346,7 +1346,7 @@
 
     function showError(message) {
       errorEl.style.display = "block";
-      errorEl.textContent = message || "Something went wrong.";
+      errorEl.textContent = message || providerText("Something went wrong.", "Algo sali\u00f3 mal.");
     }
 
     function formatDistance(meters) {
@@ -1514,9 +1514,9 @@
       if (!instruction) {
         gpsBannerEl.classList.add("waiting");
         gpsIconEl.textContent = "↑";
-        gpsDistanceEl.textContent = "Waiting for route";
-        gpsInstructionEl.textContent = "Start navigation";
-        gpsSubEl.textContent = "GigChat will show the next turn here";
+        gpsDistanceEl.textContent = providerText("Waiting for route", "Esperando ruta");
+        gpsInstructionEl.textContent = providerText("Start navigation", "Iniciar navegaci\u00f3n");
+        gpsSubEl.textContent = providerText("GigChat will show the next turn here", "GigChat mostrar\u00e1 aqu\u00ed el pr\u00f3ximo giro");
         return;
       }
 
@@ -1524,7 +1524,7 @@
 
       gpsBannerEl.classList.remove("waiting");
       gpsIconEl.textContent = maneuverIcon(maneuver);
-      gpsDistanceEl.textContent = formatStepDistance(distanceMeters) || "Next";
+      gpsDistanceEl.textContent = formatStepDistance(distanceMeters) || providerText("Next", "Siguiente");
       gpsInstructionEl.textContent = parts.main;
       gpsSubEl.textContent = parts.sub;
     }
@@ -2183,9 +2183,9 @@
 
         if (/token|401|403|forbidden|unauthorized/i.test(message)) {
           localStorage.removeItem("GIGCHAT_MAPBOX_PUBLIC_TOKEN");
-          setStatus("Mapbox token rejected. Reopen with reset_mapbox_token=1.");
-          turnMainEl.textContent = "Mapbox token issue";
-          turnSubEl.textContent = "Refresh and paste a valid public token";
+          setStatus(providerText("Mapbox token rejected. Reopen with reset_mapbox_token=1.", "El token de Mapbox fue rechazado. Abre nuevamente con reset_mapbox_token=1."));
+          turnMainEl.textContent = providerText("Mapbox token issue", "Problema con el token de Mapbox");
+          turnSubEl.textContent = providerText("Refresh and paste a valid public token", "Actualiza y pega un token p\u00fablico v\u00e1lido");
         }
       });
 
@@ -3990,7 +3990,7 @@
 
         if (useCurrentLocationAsSimulatorStart) {
           try {
-            setStatus("Simulator getting your current location...");
+            setStatus(providerText("Simulator getting your current location...", "El simulador est\u00e1 obteniendo tu ubicaci\u00f3n actual..."));
             const currentPosition = await getProviderPosition();
             const currentCoords =
               currentPosition && currentPosition.coords ? currentPosition.coords : {};
@@ -4018,17 +4018,17 @@
                   : 0,
               };
 
-              setStatus("Simulator using your current location as start.");
+              setStatus(providerText("Simulator using your current location as start.", "El simulador est\u00e1 usando tu ubicaci\u00f3n actual como inicio."));
             }
           } catch (err) {
             console.warn("SIMULATOR CURRENT LOCATION FAILED:", err);
-            setStatus("Simulator could not use current location; using test start.");
+            setStatus(providerText("Simulator could not use current location; using test start.", "El simulador no pudo usar tu ubicaci\u00f3n actual; usar\u00e1 un inicio de prueba."));
           }
         }
       }
 
       if (!fakeStart) {
-        setStatus("Simulator failed: missing map coordinates.");
+        setStatus(providerText("Simulator failed: missing map coordinates.", "El simulador fall\u00f3: faltan las coordenadas del mapa."));
         return;
       }
 
@@ -4038,8 +4038,8 @@
 
       navBtn.disabled = true;
       navBtn.textContent = providerText("Simulator on", "Simulador activo");
-      turnMainEl.textContent = "Simulator mode active";
-      turnSubEl.textContent = "Loading real route through live pipeline";
+      turnMainEl.textContent = providerText("Simulator mode active", "Modo simulador activo");
+      turnSubEl.textContent = providerText("Loading real route through live pipeline", "Cargando la ruta real mediante el sistema en vivo");
       setStatus(providerText("Simulator loading real route...", "El simulador est\u00e1 cargando la ruta real..."));
 
       try {
@@ -4059,7 +4059,7 @@
           !Array.isArray(fullRouteLinePoints) ||
           fullRouteLinePoints.length < 2
         ) {
-          setStatus("Simulator failed: backend did not return a route.");
+          setStatus(providerText("Simulator failed: backend did not return a route.", "El simulador fall\u00f3: el backend no devolvi\u00f3 una ruta."));
           return;
         }
 
@@ -4067,7 +4067,7 @@
         let metrics = buildProviderSimulatorRouteMetrics(simulatorRoutePoints);
 
         if (!Number.isFinite(metrics.totalMeters) || metrics.totalMeters < 10) {
-          setStatus("Simulator failed: route is too short.");
+          setStatus(providerText("Simulator failed: route is too short.", "El simulador fall\u00f3: la ruta es demasiado corta."));
           return;
         }
 
@@ -4086,7 +4086,7 @@
         let lastRerouteCheckAt = 0;
 
         setStatus(providerText("Simulator following route by distance. No GPS permission needed.", "El simulador est\u00e1 siguiendo la ruta por distancia. No necesita permiso de GPS."));
-        turnSubEl.textContent = "Distance-based fake GPS through live pipeline";
+        turnSubEl.textContent = providerText("Distance-based fake GPS through live pipeline", "GPS simulado por distancia mediante el sistema en vivo");
 
         const checkMapboxReroute = async () => {
           // Mapbox Reroute Watchdog v58
@@ -4207,7 +4207,7 @@
       } catch (err) {
         console.warn("PROVIDER ROUTE SIMULATOR FAILED:", err);
         const message = err && err.message ? err.message : String(err || "Unknown error");
-        setStatus("Simulator failed: " + message.slice(0, 120));
+        setStatus(providerText("Simulator failed: ", "El simulador fall\u00f3: ") + message.slice(0, 120));
       }
     }
 
@@ -4490,7 +4490,7 @@
         eta.customer_notified
       ) {
         setStatus(
-          "Route loaded. Customer notified."
+          providerText("Route loaded. Customer notified.", "Ruta cargada. Cliente notificado.")
         );
       } else if (routeLoaded) {
         setStatus(providerText("Route loaded.", "Ruta cargada."));
@@ -4626,7 +4626,7 @@
         await handlePosition(position, true);
 
         turnMainEl.textContent = providerText("Live navigation active", "Navegaci\u00f3n en vivo activa");
-        turnSubEl.textContent = "Keep this page open for live route";
+        turnSubEl.textContent = providerText("Keep this page open for live route", "Mant\u00e9n esta p\u00e1gina abierta para la ruta en vivo");
         navBtn.textContent = providerText("Navigation on", "Navegaci\u00f3n activa");
         navBtn.disabled = true;
 
@@ -4640,7 +4640,7 @@
         navBtn.disabled = false;
         navBtn.textContent = providerText("Start", "Comenzar");
         const message = err && err.message ? err.message : String(err || "Unknown error");
-        setStatus("Navigation failed: " + message.slice(0, 140));
+        setStatus(providerText("Navigation failed: ", "La navegaci\u00f3n fall\u00f3: ") + message.slice(0, 140));
       }
     }
 
@@ -4778,7 +4778,7 @@
     updateNavigationHealthMonitor();
 
     load().catch((err) => {
-      showError(err.message || "Something went wrong.");
+      showError(err.message || providerText("Something went wrong.", "Algo sali\u00f3 mal."));
     });
   </script>
 </body>
