@@ -248,6 +248,10 @@
       <button id="captureButton" class="primary hidden" disabled>
         Take photo
       </button>
+      <button id="uploadButton" class="primary hidden">
+        Use this photo
+      </button>
+
 
       <button id="retakeButton" class="secondary hidden">
         Retake photo
@@ -285,6 +289,9 @@
       document.getElementById("openCameraButton");
     const captureButton =
       document.getElementById("captureButton");
+    const uploadButton =
+      document.getElementById("uploadButton");
+
     const retakeButton =
       document.getElementById("retakeButton");
     const securityNoteEl =
@@ -293,6 +300,8 @@
     let providerLanguage = "en";
     let cameraStream = null;
     let currentJob = null;
+    let capturedPhotoBlob = null;
+    let uploadInProgress = false;
 
     function text(en, es) {
       return providerLanguage === "es" ? es : en;
@@ -329,6 +338,9 @@
 
       captureButton.textContent =
         text("Take photo", "Tomar foto");
+
+      uploadButton.textContent =
+        text("Use this photo", "Usar esta foto");
 
       retakeButton.textContent =
         text("Retake photo", "Tomar otra foto");
@@ -428,7 +440,7 @@
       if (!width || !height) {
         setStatus(
           "The camera is not ready yet.",
-          "La cámara todavía no está lista."
+          "La cÃ¡mara todavÃ­a no estÃ¡ lista."
         );
 
         return;
@@ -457,32 +469,62 @@
         height
       );
 
-      const imageData =
-        captureCanvasEl.toDataURL(
-          "image/jpeg",
-          0.9
-        );
+      captureCanvasEl.toBlob(
+        (blob) => {
+          if (!blob) {
+            setStatus(
+              "The photo could not be prepared.",
+              "No se pudo preparar la foto."
+            );
 
-      photoPreviewEl.src = imageData;
-      photoPreviewEl.style.display = "block";
-      cameraVideoEl.style.display = "none";
-      cameraGuideEl.style.display = "none";
+            return;
+          }
 
-      stopCamera();
+          capturedPhotoBlob = blob;
 
-      captureButton.classList.add("hidden");
-      retakeButton.classList.remove("hidden");
+          const previewUrl =
+            URL.createObjectURL(blob);
 
-      setStatus(
-        "Photo captured. Upload will be connected in the next step.",
-        "Foto tomada. La subida se conectará en el próximo paso."
+          photoPreviewEl.src = previewUrl;
+          photoPreviewEl.style.display = "block";
+          cameraVideoEl.style.display = "none";
+          cameraGuideEl.style.display = "none";
+
+          stopCamera();
+
+          captureButton.classList.add("hidden");
+          uploadButton.classList.remove("hidden");
+          retakeButton.classList.remove("hidden");
+
+          setStatus(
+            "Review the photo, then use it to continue.",
+            "Revisa la foto y luego Ãºsala para continuar."
+          );
+        },
+        "image/jpeg",
+        0.9
       );
     }
-
     async function retakePhoto() {
+      if (uploadInProgress) return;
+
+      capturedPhotoBlob = null;
+
+      if (
+        photoPreviewEl.src &&
+        photoPreviewEl.src.startsWith("blob:")
+      ) {
+        URL.revokeObjectURL(photoPreviewEl.src);
+      }
+
       photoPreviewEl.src = "";
       photoPreviewEl.style.display = "none";
+
+      uploadButton.classList.add("hidden");
+      uploadButton.disabled = false;
+
       retakeButton.classList.add("hidden");
+      retakeButton.disabled = false;
 
       openCameraButton.classList.remove("hidden");
       openCameraButton.disabled = false;
@@ -490,6 +532,147 @@
       await openCamera();
     }
 
+    function getCurrentPositionForUpload() {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          resolve({
+            latitude: null,
+            longitude: null,
+            accuracy: null
+          });
+
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy
+            });
+          },
+          () => {
+            resolve({
+              latitude: null,
+              longitude: null,
+              accuracy: null
+            });
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 0
+          }
+        );
+      });
+    }
+
+    async function uploadPhoto() {
+      if (
+        uploadInProgress ||
+        !capturedPhotoBlob
+      ) {
+        return;
+      }
+
+      uploadInProgress = true;
+      uploadButton.disabled = true;
+      retakeButton.disabled = true;
+
+      setStatus(
+        "Uploading secure walk photo...",
+        "Subiendo la foto segura de la caminata..."
+      );
+
+      try {
+        const token = getToken();
+
+        const location =
+          await getCurrentPositionForUpload();
+
+        const formData =
+          new FormData();
+
+        formData.append(
+          "token",
+          token
+        );
+
+        formData.append(
+          "photo",
+          capturedPhotoBlob,
+          "walk-start.jpg"
+        );
+
+        if (Number.isFinite(location.latitude)) {
+          formData.append(
+            "latitude",
+            String(location.latitude)
+          );
+        }
+
+        if (Number.isFinite(location.longitude)) {
+          formData.append(
+            "longitude",
+            String(location.longitude)
+          );
+        }
+
+        if (Number.isFinite(location.accuracy)) {
+          formData.append(
+            "accuracy",
+            String(location.accuracy)
+          );
+        }
+
+        const response =
+          await fetch(
+            API_BASE +
+              "?task=walk_start_photo_upload",
+            {
+              method: "POST",
+              body: formData
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(
+            data.error ||
+              "Photo upload failed."
+          );
+        }
+
+        uploadButton.classList.add("hidden");
+        retakeButton.classList.add("hidden");
+
+        setStatus(
+          "Photo received. GigChat will verify it before the walk begins.",
+          "Foto recibida. GigChat la verificarÃ¡ antes de comenzar la caminata."
+        );
+      } catch (error) {
+        console.error(
+          "WALK START PHOTO UPLOAD FAILED:",
+          error
+        );
+
+        uploadButton.disabled = false;
+        retakeButton.disabled = false;
+
+        statusEl.textContent =
+          error && error.message
+            ? error.message
+            : text(
+                "Photo upload failed.",
+                "No se pudo subir la foto."
+              );
+      } finally {
+        uploadInProgress = false;
+      }
+    }
     async function load() {
       const token = getToken();
 
@@ -576,6 +759,11 @@
       "click",
       capturePhoto
     );
+    uploadButton.addEventListener(
+      "click",
+      uploadPhoto
+    );
+
 
     retakeButton.addEventListener(
       "click",
