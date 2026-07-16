@@ -142,6 +142,40 @@
       text-align: center;
     }
 
+    .walk-started-card {
+      display: grid;
+      gap: 14px;
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.07);
+      text-align: center;
+    }
+
+    .timer-label {
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 13px;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .timer-value {
+      font-size: clamp(54px, 17vw, 82px);
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: -0.05em;
+    }
+
+    .timer-end-value {
+      font-size: 22px;
+      font-weight: 850;
+    }
+
+    .timer-state {
+      color: rgba(255, 255, 255, 0.68);
+      line-height: 1.45;
+    }
     .actions {
       display: grid;
       gap: 12px;
@@ -214,7 +248,32 @@
       <div id="durationValue" class="job-value">--</div>
     </section>
 
-    <section class="camera-shell">
+    <section
+      id="walkStartedCard"
+      class="walk-started-card hidden"
+      aria-live="polite"
+    >
+      <div id="remainingLabel" class="timer-label">
+        Time remaining
+      </div>
+
+      <div id="timerValue" class="timer-value">
+        --:--
+      </div>
+
+      <div id="estimatedEndLabel" class="timer-label">
+        Estimated completion
+      </div>
+
+      <div id="expectedEndValue" class="timer-end-value">
+        --
+      </div>
+
+      <div id="timerState" class="timer-state">
+        Walk timer active.
+      </div>
+    </section>
+    <section id="cameraShell" class="camera-shell">
       <div id="cameraPlaceholder" class="placeholder">
         Camera access has not started.
       </div>
@@ -240,7 +299,7 @@
       Loading secure walk information...
     </div>
 
-    <div class="actions">
+    <div id="actions" class="actions">
       <button id="openCameraButton" class="primary" disabled>
         Open camera
       </button>
@@ -274,6 +333,22 @@
     const dogNameEl = document.getElementById("dogName");
     const durationLabelEl = document.getElementById("durationLabel");
     const durationValueEl = document.getElementById("durationValue");
+    const walkStartedCardEl =
+      document.getElementById("walkStartedCard");
+    const remainingLabelEl =
+      document.getElementById("remainingLabel");
+    const timerValueEl =
+      document.getElementById("timerValue");
+    const estimatedEndLabelEl =
+      document.getElementById("estimatedEndLabel");
+    const expectedEndValueEl =
+      document.getElementById("expectedEndValue");
+    const timerStateEl =
+      document.getElementById("timerState");
+    const cameraShellEl =
+      document.getElementById("cameraShell");
+    const actionsEl =
+      document.getElementById("actions");
     const statusEl = document.getElementById("status");
     const cameraPlaceholderEl =
       document.getElementById("cameraPlaceholder");
@@ -302,6 +377,7 @@
     let currentJob = null;
     let capturedPhotoBlob = null;
     let uploadInProgress = false;
+    let walkTimerIntervalId = null;
 
     function text(en, es) {
       return providerLanguage === "es" ? es : en;
@@ -331,10 +407,10 @@
         text("Dog", "Perro");
 
       durationLabelEl.textContent =
-        text("Walk duration", "Duración de la caminata");
+        text("Walk duration", "Duraci\u00f3n de la caminata");
 
       openCameraButton.textContent =
-        text("Open camera", "Abrir cámara");
+        text("Open camera", "Abrir c\u00e1mara");
 
       captureButton.textContent =
         text("Take photo", "Tomar foto");
@@ -347,7 +423,7 @@
 
       securityNoteEl.textContent = text(
         "This page uses the device camera to capture a new image for the active GigChat service.",
-        "Esta página utiliza la cámara del dispositivo para tomar una imagen nueva del servicio activo de GigChat."
+        "Esta p\u00e1gina utiliza la c\u00e1mara del dispositivo para tomar una imagen nueva del servicio activo de GigChat."
       );
     }
 
@@ -365,7 +441,7 @@
 
       setStatus(
         "Requesting camera permission...",
-        "Solicitando permiso para usar la cámara..."
+        "Solicitando permiso para usar la c\u00e1mara..."
       );
 
       try {
@@ -376,7 +452,7 @@
           throw new Error(
             text(
               "This browser does not support live camera access.",
-              "Este navegador no permite acceso a la cámara en vivo."
+              "Este navegador no permite acceso a la c\u00e1mara en vivo."
             )
           );
         }
@@ -413,7 +489,7 @@
 
         setStatus(
           "Center the dog in the guide, then take the photo.",
-          "Centra al perro dentro de la guía y luego toma la foto."
+          "Centra al perro dentro de la gu\u00eda y luego toma la foto."
         );
       } catch (error) {
         console.error("WALK START CAMERA FAILED:", error);
@@ -425,7 +501,7 @@
             ? error.message
             : text(
                 "Camera access failed.",
-                "No se pudo abrir la cámara."
+                "No se pudo abrir la c\u00e1mara."
               );
       }
     }
@@ -440,7 +516,7 @@
       if (!width || !height) {
         setStatus(
           "The camera is not ready yet.",
-          "La cÃ¡mara todavÃ­a no estÃ¡ lista."
+          "La c\u00e1mara todav\u00eda no est\u00e1 lista."
         );
 
         return;
@@ -568,6 +644,145 @@
       });
     }
 
+    function stopWalkTimer() {
+      if (walkTimerIntervalId !== null) {
+        window.clearInterval(walkTimerIntervalId);
+        walkTimerIntervalId = null;
+      }
+    }
+
+    function formatRemainingTime(totalSeconds) {
+      const safeSeconds =
+        Math.max(
+          0,
+          Math.ceil(Number(totalSeconds) || 0)
+        );
+
+      const minutes =
+        Math.floor(safeSeconds / 60);
+
+      const seconds =
+        safeSeconds % 60;
+
+      return (
+        String(minutes).padStart(2, "0") +
+        ":" +
+        String(seconds).padStart(2, "0")
+      );
+    }
+
+    function showWalkStarted(data) {
+      stopCamera();
+      stopWalkTimer();
+
+      const dogName =
+        String(
+          data.dog_name ||
+          currentJob?.pet_name ||
+          ""
+        ).trim();
+
+      const expectedEndTimestamp =
+        Date.parse(
+          String(data.expected_end_at || "")
+        );
+
+      titleEl.textContent =
+        text(
+          "Walk started",
+          "Caminata iniciada"
+        );
+
+      subtitleEl.textContent =
+        dogName
+          ? text(
+              `${dogName}'s walk is now in progress.`,
+              `La caminata de ${dogName} est\u00e1 en progreso.`
+            )
+          : text(
+              "The walk is now in progress.",
+              "La caminata est\u00e1 en progreso."
+            );
+
+      remainingLabelEl.textContent =
+        text(
+          "Time remaining",
+          "Tiempo restante"
+        );
+
+      estimatedEndLabelEl.textContent =
+        text(
+          "Estimated completion",
+          "Finalizaci\u00f3n estimada"
+        );
+
+      timerStateEl.textContent =
+        text(
+          "Photo received. The walk timer started automatically.",
+          "Foto recibida. El temporizador de la caminata comenz\u00f3 autom\u00e1ticamente."
+        );
+
+      cameraShellEl.classList.add("hidden");
+      actionsEl.classList.add("hidden");
+      statusEl.classList.add("hidden");
+      securityNoteEl.classList.add("hidden");
+      walkStartedCardEl.classList.remove("hidden");
+
+      if (!Number.isFinite(expectedEndTimestamp)) {
+        timerValueEl.textContent = "--:--";
+        expectedEndValueEl.textContent = "--";
+        return;
+      }
+
+      expectedEndValueEl.textContent =
+        new Date(
+          expectedEndTimestamp
+        ).toLocaleTimeString(
+          providerLanguage === "es"
+            ? "es-PA"
+            : "en-US",
+          {
+            hour: "numeric",
+            minute: "2-digit"
+          }
+        );
+
+      const updateTimer = () => {
+        const secondsRemaining =
+          Math.max(
+            0,
+            Math.ceil(
+              (
+                expectedEndTimestamp -
+                Date.now()
+              ) / 1000
+            )
+          );
+
+        timerValueEl.textContent =
+          formatRemainingTime(
+            secondsRemaining
+          );
+
+        if (secondsRemaining <= 0) {
+          stopWalkTimer();
+
+          timerStateEl.textContent =
+            text(
+              "Scheduled walk time complete.",
+              "Tiempo programado de la caminata completado."
+            );
+        }
+      };
+
+      updateTimer();
+
+      walkTimerIntervalId =
+        window.setInterval(
+          updateTimer,
+          1000
+        );
+    }
     async function uploadPhoto() {
       if (
         uploadInProgress ||
@@ -649,10 +864,7 @@
         uploadButton.classList.add("hidden");
         retakeButton.classList.add("hidden");
 
-        setStatus(
-          "Photo received. GigChat will verify it before the walk begins.",
-          "Foto recibida. GigChat la verificar\u00e1 antes de comenzar la caminata."
-        );
+        showWalkStarted(data);
       } catch (error) {
         console.error(
           "WALK START PHOTO UPLOAD FAILED:",
@@ -684,7 +896,7 @@
 
       const response = await fetch(
         API_BASE +
-          "?task=provider_job_data&token=" +
+          "?task=walk_start_job_data&token=" +
           encodeURIComponent(token)
       );
 
@@ -719,7 +931,7 @@
         throw new Error(
           text(
             "This secure camera is only available for walks.",
-            "Esta cámara segura está disponible únicamente para caminatas."
+            "Esta c\u00e1mara segura est\u00e1 disponible \u00fanicamente para caminatas."
           )
         );
       }
@@ -742,11 +954,29 @@
             )
           : "--";
 
+      const jobStatus =
+        String(currentJob.status || "")
+          .trim()
+          .toLowerCase();
+
+      if (jobStatus === "in_progress") {
+        console.log("walk_timer_recovered");
+
+        showWalkStarted({
+          dog_name: dogName,
+          duration_minutes: duration,
+          started_at: currentJob.started_at,
+          expected_end_at:
+            currentJob.expected_end_at
+        });
+
+        return;
+      }
       openCameraButton.disabled = false;
 
       setStatus(
         "Open the camera when you are with the dog.",
-        "Abre la cámara cuando estés con el perro."
+        "Abre la c\u00e1mara cuando est\u00e9s con el perro."
       );
     }
 
