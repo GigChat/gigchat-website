@@ -373,6 +373,7 @@
       document.getElementById("securityNote");
 
     let providerLanguage = "en";
+    let pageMode = "start";
     let cameraStream = null;
     let currentJob = null;
     let capturedPhotoBlob = null;
@@ -390,43 +391,109 @@
       return String(params.get("token") || "").trim();
     }
 
+    function getMode() {
+      const params =
+        new URLSearchParams(
+          window.location.search
+        );
+
+      return String(
+        params.get("mode") || ""
+      )
+        .trim()
+        .toLowerCase() === "end"
+        ? "end"
+        : "start";
+    }
+
+    function isWalkEndMode() {
+      return pageMode === "end";
+    }
+
     function setStatus(en, es) {
       statusEl.textContent = text(en, es);
     }
 
     function applyLanguage() {
-      document.documentElement.lang = providerLanguage;
+      document.documentElement.lang =
+        providerLanguage;
 
-      titleEl.textContent =
-        text("Live walk photo", "Foto en vivo de la caminata");
+      if (isWalkEndMode()) {
+        titleEl.textContent =
+          text(
+            "Secure final walk photo",
+            "Foto final segura de la caminata"
+          );
 
-      subtitleEl.textContent = text(
-        "Take a new photo of the dog before beginning the walk.",
-        "Toma una foto nueva del perro antes de comenzar la caminata."
-      );
+        subtitleEl.textContent =
+          text(
+            "Take a new photo of the dog to securely complete the walk.",
+            "Toma una foto nueva del perro para completar la caminata de forma segura."
+          );
+
+        uploadButton.textContent =
+          text(
+            "Submit final photo",
+            "Enviar foto final"
+          );
+
+        securityNoteEl.textContent =
+          text(
+            "The walk remains in progress until the secure final photo is received.",
+            "La caminata permanece en progreso hasta recibir la foto final segura."
+          );
+      } else {
+        titleEl.textContent =
+          text(
+            "Live walk photo",
+            "Foto en vivo de la caminata"
+          );
+
+        subtitleEl.textContent =
+          text(
+            "Take a new photo of the dog before beginning the walk.",
+            "Toma una foto nueva del perro antes de comenzar la caminata."
+          );
+
+        uploadButton.textContent =
+          text(
+            "Use this photo",
+            "Usar esta foto"
+          );
+
+        securityNoteEl.textContent =
+          text(
+            "This page uses the device camera to capture a new image for the active GigChat service.",
+            "Esta p\u00e1gina utiliza la c\u00e1mara del dispositivo para tomar una imagen nueva del servicio activo de GigChat."
+          );
+      }
 
       dogLabelEl.textContent =
         text("Dog", "Perro");
 
       durationLabelEl.textContent =
-        text("Walk duration", "Duraci\u00f3n de la caminata");
+        text(
+          "Walk duration",
+          "Duraci\u00f3n de la caminata"
+        );
 
       openCameraButton.textContent =
-        text("Open camera", "Abrir c\u00e1mara");
+        text(
+          "Open camera",
+          "Abrir c\u00e1mara"
+        );
 
       captureButton.textContent =
-        text("Take photo", "Tomar foto");
-
-      uploadButton.textContent =
-        text("Use this photo", "Usar esta foto");
+        text(
+          "Take photo",
+          "Tomar foto"
+        );
 
       retakeButton.textContent =
-        text("Retake photo", "Tomar otra foto");
-
-      securityNoteEl.textContent = text(
-        "This page uses the device camera to capture a new image for the active GigChat service.",
-        "Esta p\u00e1gina utiliza la c\u00e1mara del dispositivo para tomar una imagen nueva del servicio activo de GigChat."
-      );
+        text(
+          "Retake photo",
+          "Tomar otra foto"
+        );
     }
 
     function stopCamera() {
@@ -911,6 +978,91 @@
           1000
         );
     }
+    function showWalkCompleted(data) {
+      stopCamera();
+      stopWalkTimer();
+
+      const dogName =
+        String(
+          data.dog_name ||
+          currentJob?.pet_name ||
+          ""
+        ).trim();
+
+      const completedTimestamp =
+        Date.parse(
+          String(
+            data.completed_at ||
+            currentJob?.completed_at ||
+            ""
+          )
+        );
+
+      titleEl.textContent =
+        text(
+          "Walk completed",
+          "Caminata completada"
+        );
+
+      subtitleEl.textContent =
+        dogName
+          ? text(
+              `${dogName}'s walk was completed securely.`,
+              `La caminata de ${dogName} fue completada de forma segura.`
+            )
+          : text(
+              "The walk was completed securely.",
+              "La caminata fue completada de forma segura."
+            );
+
+      remainingLabelEl.textContent =
+        text(
+          "Service status",
+          "Estado del servicio"
+        );
+
+      timerValueEl.textContent =
+        text(
+          "DONE",
+          "LISTO"
+        );
+
+      estimatedEndLabelEl.textContent =
+        text(
+          "Completed",
+          "Completada"
+        );
+
+      expectedEndValueEl.textContent =
+        Number.isFinite(
+          completedTimestamp
+        )
+          ? new Date(
+              completedTimestamp
+            ).toLocaleTimeString(
+              providerLanguage === "es"
+                ? "es-PA"
+                : "en-US",
+              {
+                hour: "numeric",
+                minute: "2-digit"
+              }
+            )
+          : "--";
+
+      timerStateEl.textContent =
+        text(
+          "Final photo received. The walk was completed successfully.",
+          "Foto final recibida. La caminata fue completada correctamente."
+        );
+
+      cameraShellEl.classList.add("hidden");
+      actionsEl.classList.add("hidden");
+      statusEl.classList.add("hidden");
+      securityNoteEl.classList.add("hidden");
+      walkStartedCardEl.classList.remove("hidden");
+    }
+
     async function uploadPhoto() {
       if (
         uploadInProgress ||
@@ -923,10 +1075,17 @@
       uploadButton.disabled = true;
       retakeButton.disabled = true;
 
-      setStatus(
-        "Uploading secure walk photo...",
-        "Subiendo la foto segura de la caminata..."
-      );
+      if (isWalkEndMode()) {
+        setStatus(
+          "Uploading secure final photo...",
+          "Subiendo la foto final segura..."
+        );
+      } else {
+        setStatus(
+          "Uploading secure walk photo...",
+          "Subiendo la foto segura de la caminata..."
+        );
+      }
 
       try {
         const token = getToken();
@@ -945,7 +1104,9 @@
         formData.append(
           "photo",
           capturedPhotoBlob,
-          "walk-start.jpg"
+          isWalkEndMode()
+            ? "walk-end.jpg"
+            : "walk-start.jpg"
         );
 
         if (Number.isFinite(location.latitude)) {
@@ -972,7 +1133,12 @@
         const response =
           await fetch(
             API_BASE +
-              "?task=walk_start_photo_upload",
+              "?task=" +
+              (
+                isWalkEndMode()
+                  ? "walk_end_photo_upload"
+                  : "walk_start_photo_upload"
+              ),
             {
               method: "POST",
               body: formData
@@ -992,10 +1158,16 @@
         uploadButton.classList.add("hidden");
         retakeButton.classList.add("hidden");
 
-        showWalkStarted(data);
+        if (isWalkEndMode()) {
+          showWalkCompleted(data);
+        } else {
+          showWalkStarted(data);
+        }
       } catch (error) {
         console.error(
-          "WALK START PHOTO UPLOAD FAILED:",
+          isWalkEndMode()
+            ? "WALK END PHOTO UPLOAD FAILED:"
+            : "WALK START PHOTO UPLOAD FAILED:",
           error
         );
 
@@ -1022,9 +1194,18 @@
         );
       }
 
+      pageMode = getMode();
+
+      const jobDataTask =
+        isWalkEndMode()
+          ? "walk_end_job_data"
+          : "walk_start_job_data";
+
       const response = await fetch(
         API_BASE +
-          "?task=walk_start_job_data&token=" +
+          "?task=" +
+          jobDataTask +
+          "&token=" +
           encodeURIComponent(token)
       );
 
@@ -1086,6 +1267,66 @@
         String(currentJob.status || "")
           .trim()
           .toLowerCase();
+
+      if (isWalkEndMode()) {
+        const endPhotoStatus =
+          String(
+            currentJob.walk_end_photo_status ||
+            ""
+          )
+            .trim()
+            .toLowerCase();
+
+        if (jobStatus === "completed") {
+          showWalkCompleted({
+            dog_name: dogName,
+            completed_at:
+              currentJob.completed_at
+          });
+
+          return;
+        }
+
+        if (
+          jobStatus !== "in_progress"
+        ) {
+          throw new Error(
+            text(
+              "This walk is not available for final photo completion.",
+              "Esta caminata no est\u00e1 disponible para completar con la foto final."
+            )
+          );
+        }
+
+        if (
+          !data.can_upload_end_photo ||
+          endPhotoStatus !==
+            "awaiting_photo"
+        ) {
+          throw new Error(
+            endPhotoStatus ===
+              "verifying"
+              ? text(
+                  "The final photo upload is already in progress.",
+                  "La carga de la foto final ya est\u00e1 en progreso."
+                )
+              : text(
+                  "The final photo is not currently available.",
+                  "La foto final no est\u00e1 disponible en este momento."
+                )
+          );
+        }
+
+        openCameraButton.disabled =
+          false;
+
+        setStatus(
+          "Open the camera and take the secure final photo.",
+          "Abre la c\u00e1mara y toma la foto final segura."
+        );
+
+        return;
+      }
 
       if (jobStatus === "in_progress") {
         console.log("walk_timer_recovered");
