@@ -378,6 +378,8 @@
     let capturedPhotoBlob = null;
     let uploadInProgress = false;
     let walkTimerIntervalId = null;
+    let walkEndRequestInProgress = false;
+    let walkEndRequested = false;
 
     function text(en, es) {
       return providerLanguage === "es" ? es : en;
@@ -671,6 +673,130 @@
       );
     }
 
+    async function requestWalkEndPhoto() {
+      if (
+        walkEndRequestInProgress ||
+        walkEndRequested
+      ) {
+        return;
+      }
+
+      walkEndRequestInProgress = true;
+
+      timerStateEl.textContent =
+        text(
+          "Preparing the secure final photo...",
+          "Preparando la foto final segura..."
+        );
+
+      try {
+        const token = getToken();
+
+        if (!token) {
+          throw new Error(
+            text(
+              "Missing secure walk token.",
+              "Falta el token seguro de la caminata."
+            )
+          );
+        }
+
+        const response =
+          await fetch(
+            API_BASE +
+              "?task=walk_end_request",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                token
+              })
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(
+            data.error ||
+              text(
+                "The final photo could not be prepared.",
+                "No se pudo preparar la foto final."
+              )
+          );
+        }
+
+        if (
+          data.status ===
+          "already_completed"
+        ) {
+          walkEndRequested = true;
+
+          timerStateEl.textContent =
+            text(
+              "This walk is already completed.",
+              "Esta caminata ya fue completada."
+            );
+
+          return;
+        }
+
+        const walkEndUrl =
+          String(
+            data.walk_end_url || ""
+          ).trim();
+
+        if (!walkEndUrl) {
+          throw new Error(
+            text(
+              "The secure final photo link is missing.",
+              "Falta el enlace seguro de la foto final."
+            )
+          );
+        }
+
+        walkEndRequested = true;
+
+        timerStateEl.textContent =
+          text(
+            "Opening the secure final photo...",
+            "Abriendo la foto final segura..."
+          );
+
+        window.location.assign(
+          walkEndUrl
+        );
+      } catch (error) {
+        console.error(
+          "WALK END REQUEST FAILED:",
+          error
+        );
+
+        walkEndRequestInProgress = false;
+
+        timerStateEl.textContent =
+          error && error.message
+            ? error.message
+            : text(
+                "The final photo could not be prepared. Retrying...",
+                "No se pudo preparar la foto final. Reintentando..."
+              );
+
+        window.setTimeout(
+          () => {
+            if (!walkEndRequested) {
+              void requestWalkEndPhoto();
+            }
+          },
+          5000
+        );
+      }
+    }
+
     function showWalkStarted(data) {
       stopCamera();
       stopWalkTimer();
@@ -769,9 +895,11 @@
 
           timerStateEl.textContent =
             text(
-              "Scheduled walk time complete.",
-              "Tiempo programado de la caminata completado."
+              "Scheduled walk time complete. Preparing final photo.",
+              "Tiempo programado completado. Preparando la foto final."
             );
+
+          void requestWalkEndPhoto();
         }
       };
 
