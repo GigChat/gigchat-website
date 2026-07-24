@@ -1100,7 +1100,17 @@
       }
 
       try {
+        const clientTimingStartedAt =
+          performance.now();
+
+        let gpsTimingMs = 0;
+        let fetchTimingMs = 0;
+        let responseJsonTimingMs = 0;
+
         const token = getToken();
+
+        const gpsTimingStartedAt =
+          performance.now();
 
         const location =
           await getCurrentPositionForUpload(
@@ -1113,6 +1123,12 @@
                   timeout: 2500,
                   maximumAge: 30000
                 }
+          );
+
+        gpsTimingMs =
+          Math.round(
+            performance.now() -
+            gpsTimingStartedAt
           );
 
         const formData =
@@ -1152,6 +1168,9 @@
           );
         }
 
+        const fetchTimingStartedAt =
+          performance.now();
+
         const response =
           await fetch(
             API_BASE +
@@ -1167,8 +1186,23 @@
             }
           );
 
+        fetchTimingMs =
+          Math.round(
+            performance.now() -
+            fetchTimingStartedAt
+          );
+
+        const responseJsonTimingStartedAt =
+          performance.now();
+
         const data =
           await response.json();
+
+        responseJsonTimingMs =
+          Math.round(
+            performance.now() -
+            responseJsonTimingStartedAt
+          );
 
         if (!response.ok || !data.ok) {
           throw new Error(
@@ -1183,7 +1217,44 @@
         if (isWalkEndMode()) {
           showWalkCompleted(data);
         } else {
+          const totalTimingMs =
+            Math.round(
+              performance.now() -
+              clientTimingStartedAt
+            );
+
+          const clientTiming = {
+            gps_ms: gpsTimingMs,
+            fetch_ms: fetchTimingMs,
+            response_json_ms:
+              responseJsonTimingMs,
+            total_ms: totalTimingMs,
+            photo_bytes:
+              capturedPhotoBlob.size
+          };
+
+          console.log(
+            "WALK START CLIENT TIMING:",
+            clientTiming
+          );
+
           showWalkStarted(data);
+
+          window.setTimeout(
+            () => {
+              window.alert(
+                [
+                  "Walk start timing",
+                  `GPS: ${clientTiming.gps_ms} ms`,
+                  `Fetch: ${clientTiming.fetch_ms} ms`,
+                  `Response JSON: ${clientTiming.response_json_ms} ms`,
+                  `Total: ${clientTiming.total_ms} ms`,
+                  `Photo: ${clientTiming.photo_bytes} bytes`
+                ].join("\n")
+              );
+            },
+            250
+          );
         }
       } catch (error) {
         console.error(
