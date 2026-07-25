@@ -1104,6 +1104,7 @@
           performance.now();
 
         let gpsTimingMs = 0;
+        let probeTimingMs = 0;
         let fetchTimingMs = 0;
         let responseJsonTimingMs = 0;
 
@@ -1130,6 +1131,37 @@
             performance.now() -
             gpsTimingStartedAt
           );
+
+        if (!isWalkEndMode()) {
+          const probeTimingStartedAt =
+            performance.now();
+
+          try {
+            const probeResponse =
+              await fetch(
+                API_BASE +
+                  "?task=walk_start_job_data" +
+                  "&token=" +
+                  encodeURIComponent(token),
+                {
+                  cache: "no-store"
+                }
+              );
+
+            await probeResponse.text();
+          } catch (error) {
+            console.warn(
+              "WALK START PROBE FAILED:",
+              error
+            );
+          }
+
+          probeTimingMs =
+            Math.round(
+              performance.now() -
+              probeTimingStartedAt
+            );
+        }
 
         const formData =
           new FormData();
@@ -1225,6 +1257,7 @@
 
           const clientTiming = {
             gps_ms: gpsTimingMs,
+            probe_ms: probeTimingMs,
             fetch_ms: fetchTimingMs,
             response_json_ms:
               responseJsonTimingMs,
@@ -1246,6 +1279,7 @@
                 [
                   "Walk start timing",
                   `GPS: ${clientTiming.gps_ms} ms`,
+                  `Probe: ${clientTiming.probe_ms} ms`,
                   `Fetch: ${clientTiming.fetch_ms} ms`,
                   `Response JSON: ${clientTiming.response_json_ms} ms`,
                   `Total: ${clientTiming.total_ms} ms`,
