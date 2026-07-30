@@ -382,6 +382,20 @@
     let walkEndRequestInProgress = false;
     let walkEndRequested = false;
 
+    /*
+     * Walk Telemetry Foundation
+     *
+     * The secure walk timer owns GPS tracking after the
+     * initial photo starts the walk.
+     */
+    let walkLocationWatchId = null;
+    let walkLocationLastPingAt = 0;
+    let walkLocationPingInFlight = false;
+    let walkTelemetryActive = false;
+
+    const WALK_LOCATION_PING_INTERVAL_MS =
+      10000;
+
     function text(en, es) {
       return providerLanguage === "es" ? es : en;
     }
@@ -732,6 +746,312 @@
       }
     }
 
+    function stopWalkLocationTracking() {
+      walkTelemetryActive = false;
+
+      if (
+        walkLocationWatchId !== null &&
+        navigator.geolocation
+      ) {
+        navigator.geolocation.clearWatch(
+          walkLocationWatchId
+        );
+      }
+
+      walkLocationWatchId = null;
+      walkLocationLastPingAt = 0;
+      walkLocationPingInFlight = false;
+    }
+
+    function getWalkProviderTrackingToken() {
+      return String(
+        currentJob?.provider_tracking_token || ""
+      ).trim();
+    }
+
+    function buildWalkDeviceMetadata() {
+      const userAgent =
+        String(
+          navigator.userAgent || ""
+        ).trim();
+
+      const platform =
+        String(
+          navigator.userAgentData?.platform ||
+          navigator.platform ||
+          ""
+        ).trim();
+
+      return {
+        device_platform:
+          platform || null,
+
+        browser_user_agent:
+          userAgent || null,
+
+        language:
+          String(
+            navigator.language || ""
+          ).trim() || null,
+
+        screen_width:
+          Number.isFinite(
+            Number(window.screen?.width)
+          )
+            ? Number(window.screen.width)
+            : null,
+
+        screen_height:
+          Number.isFinite(
+            Number(window.screen?.height)
+          )
+            ? Number(window.screen.height)
+            : null
+      };
+    }
+
+    async function sendWalkLocationPing(
+      position,
+      forcePing = false
+    ) {
+      const providerTrackingToken =
+        getWalkProviderTrackingToken();
+
+      if (!providerTrackingToken) {
+        throw new Error(
+          "Provider tracking token is missing."
+        );
+      }
+
+      const coords =
+        position?.coords || {};
+
+      const latitude =
+        Number(coords.latitude);
+
+      const longitude =
+        Number(coords.longitude);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        throw new Error(
+          "Invalid walk GPS position."
+        );
+      }
+
+      const now = Date.now();
+
+      if (
+        !forcePing &&
+        now - walkLocationLastPingAt <
+          WALK_LOCATION_PING_INTERVAL_MS
+      ) {
+        return;
+      }
+
+      if (walkLocationPingInFlight) {
+        return;
+      }
+
+      walkLocationPingInFlight = true;
+      walkLocationLastPingAt = now;
+
+      try {
+        const capturedAt =
+          Number.isFinite(
+            Number(position?.timestamp)
+          )
+            ? new Date(
+                Number(position.timestamp)
+              ).toISOString()
+            : new Date().toISOString();
+
+        const response =
+          await fetch(
+            API_BASE +
+              "?task=provider_location_ping",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                token:
+                  providerTrackingToken,
+
+                latitude,
+                longitude,
+
+                accuracy:
+                  Number.isFinite(
+                    Number(coords.accuracy)
+                  )
+                    ? Number(coords.accuracy)
+                    : null,
+
+                altitude:
+                  Number.isFinite(
+                    Number(coords.altitude)
+                  )
+                    ? Number(coords.altitude)
+                    : null,
+
+                altitude_accuracy:
+                  Number.isFinite(
+                    Number(
+                      coords.altitudeAccuracy
+                    )
+                  )
+                    ? Number(
+                        coords.altitudeAccuracy
+                      )
+                    : null,
+
+                speed:
+                  Number.isFinite(
+                    Number(coords.speed)
+                  ) &&
+                  Number(coords.speed) >= 0
+                    ? Number(coords.speed)
+                    : null,
+
+                heading:
+                  Number.isFinite(
+                    Number(coords.heading)
+                  ) &&
+                  Number(coords.heading) >= 0
+                    ? Number(coords.heading)
+                    : null,
+
+                captured_at:
+                  capturedAt,
+
+                location_source:
+                  "browser_geolocation",
+
+                telemetry_client:
+                  "walk_timer",
+
+                is_background:
+                  document.visibilityState !==
+                  "visible",
+
+                ...buildWalkDeviceMetadata()
+              })
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !data.ok
+        ) {
+          throw new Error(
+            data.error ||
+            "Could not record walk location."
+          );
+        }
+
+        console.log(
+          "WALK LOCATION PING RECORDED:",
+          {
+            dispatchJobId:
+              data.dispatch_job_id,
+            capturedAt,
+            latitude,
+            longitude,
+            accuracy:
+              coords.accuracy ?? null
+          }
+        );
+      } finally {
+        walkLocationPingInFlight = false;
+      }
+    }
+
+    function startWalkLocationTracking(
+      reason = "walk-started"
+    ) {
+      if (!navigator.geolocation) {
+        console.warn(
+          "WALK LOCATION TRACKING UNAVAILABLE: geolocation is not supported."
+        );
+
+        return false;
+      }
+
+      const providerTrackingToken =
+        getWalkProviderTrackingToken();
+
+      if (!providerTrackingToken) {
+        console.warn(
+          "WALK LOCATION TRACKING UNAVAILABLE: provider tracking token is missing."
+        );
+
+        return false;
+      }
+
+      walkTelemetryActive = true;
+
+      if (walkLocationWatchId !== null) {
+        navigator.geolocation.clearWatch(
+          walkLocationWatchId
+        );
+
+        walkLocationWatchId = null;
+      }
+
+      walkLocationWatchId =
+        navigator.geolocation.watchPosition(
+          (position) => {
+            void sendWalkLocationPing(
+              position,
+              walkLocationLastPingAt === 0
+            ).catch((error) => {
+              console.warn(
+                "WALK LOCATION PING FAILED:",
+                error
+              );
+            });
+          },
+          (error) => {
+            console.warn(
+              "WALK LOCATION WATCH FAILED:",
+              {
+                reason,
+                code:
+                  error?.code ?? null,
+                message:
+                  error?.message ?? null
+              }
+            );
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 16000,
+            maximumAge: 5000
+          }
+        );
+
+      console.log(
+        "WALK LOCATION WATCH STARTED:",
+        {
+          reason,
+          watchId:
+            walkLocationWatchId,
+          intervalMs:
+            WALK_LOCATION_PING_INTERVAL_MS
+        }
+      );
+
+      return true;
+    }
+
     function formatRemainingTime(totalSeconds) {
       const safeSeconds =
         Math.max(
@@ -933,6 +1253,14 @@
       securityNoteEl.classList.add("hidden");
       walkStartedCardEl.classList.remove("hidden");
 
+      /*
+       * A newly started walk and a recovered timer both enter
+       * through this function, so GPS tracking is resumed here.
+       */
+      startWalkLocationTracking(
+        "walk-timer-visible"
+      );
+
       if (!Number.isFinite(expectedEndTimestamp)) {
         timerValueEl.textContent = "--:--";
         expectedEndValueEl.textContent = "--";
@@ -993,6 +1321,7 @@
     function showWalkCompleted(data) {
       stopCamera();
       stopWalkTimer();
+      stopWalkLocationTracking();
 
       const dogName =
         String(
@@ -1415,7 +1744,25 @@
 
     window.addEventListener(
       "pagehide",
-      stopCamera
+      () => {
+        stopCamera();
+        stopWalkLocationTracking();
+      }
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      () => {
+        if (
+          document.visibilityState ===
+            "visible" &&
+          walkTelemetryActive
+        ) {
+          startWalkLocationTracking(
+            "page-visible-recovery"
+          );
+        }
+      }
     );
 
     load().catch((error) => {
