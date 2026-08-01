@@ -797,7 +797,7 @@
 
 
     <section id="gpsBanner" class="gps-banner waiting" aria-live="polite">
-      <div id="gpsIcon" class="gps-icon">↑</div>
+      <div id="gpsIcon" class="gps-icon">â†‘</div>
       <div class="gps-copy">
         <div id="gpsDistance" class="gps-distance">Waiting for route</div>
         <div id="gpsInstruction" class="gps-instruction">Start navigation</div>
@@ -1260,7 +1260,7 @@
 
         healthMapMatchEl.textContent =
           age && navigationMapMatchStatus === "Matched"
-            ? `Matched Â· ${age}`
+            ? `Matched Ã‚Â· ${age}`
             : navigationMapMatchStatus;
       }
 
@@ -1375,16 +1375,16 @@
     function maneuverIcon(maneuver) {
       const value = String(maneuver || "").toUpperCase();
 
-      if (value.includes("LEFT")) return "↰";
-      if (value.includes("RIGHT")) return "↱";
-      if (value.includes("ROUNDABOUT")) return "↻";
-      if (value.includes("RAMP")) return "↱";
-      if (value.includes("MERGE")) return "⇢";
-      if (value.includes("DEPART")) return "↑";
-      if (value.includes("ARRIVE")) return "✓";
-      if (value.includes("UTURN")) return "↶";
+      if (value.includes("LEFT")) return "â†°";
+      if (value.includes("RIGHT")) return "â†±";
+      if (value.includes("ROUNDABOUT")) return "â†»";
+      if (value.includes("RAMP")) return "â†±";
+      if (value.includes("MERGE")) return "â‡¢";
+      if (value.includes("DEPART")) return "â†‘";
+      if (value.includes("ARRIVE")) return "âœ“";
+      if (value.includes("UTURN")) return "â†¶";
 
-      return "↑";
+      return "â†‘";
     }
 
     function cleanGpsInstruction(value) {
@@ -1513,7 +1513,7 @@
 
       if (!instruction) {
         gpsBannerEl.classList.add("waiting");
-        gpsIconEl.textContent = "↑";
+        gpsIconEl.textContent = "â†‘";
         gpsDistanceEl.textContent = providerText("Waiting for route", "Esperando ruta");
         gpsInstructionEl.textContent = providerText("Start navigation", "Iniciar navegaci\u00f3n");
         gpsSubEl.textContent = providerText("GigChat will show the next turn here", "GigChat mostrar\u00e1 aqu\u00ed el pr\u00f3ximo giro");
@@ -4396,26 +4396,350 @@
       }
     }
 
-    async function sendProviderLocationPing(position) {
-      const coords = position && position.coords ? position.coords : {};
 
-      const res = await fetch(API_BASE + "?task=provider_location_ping", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token: currentToken,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-        }),
-      });
+    const PROVIDER_WEB_APP_VERSION =
+      "job-3d-mapbox-device-metadata-v1";
+
+    // Battery and permission metadata are refreshed for every telemetry ping.
+
+    function detectProviderBrowserName() {
+      const userAgent =
+        String(navigator.userAgent || "").toLowerCase();
+
+      if (
+        userAgent.includes("edg/")
+      ) {
+        return "Edge";
+      }
+
+      if (
+        userAgent.includes("crios") ||
+        userAgent.includes("chrome")
+      ) {
+        return "Chrome";
+      }
+
+      if (
+        userAgent.includes("fxios") ||
+        userAgent.includes("firefox")
+      ) {
+        return "Firefox";
+      }
+
+      if (
+        userAgent.includes("safari")
+      ) {
+        return "Safari";
+      }
+
+      return "Unknown";
+    }
+
+    function detectProviderDevicePlatform() {
+      const userAgent =
+        String(navigator.userAgent || "").toLowerCase();
+
+      if (
+        userAgent.includes("iphone") ||
+        userAgent.includes("ipad") ||
+        userAgent.includes("ipod")
+      ) {
+        return "iOS";
+      }
+
+      if (
+        userAgent.includes("android")
+      ) {
+        return "Android";
+      }
+
+      if (
+        userAgent.includes("windows")
+      ) {
+        return "Windows";
+      }
+
+      if (
+        userAgent.includes("macintosh") ||
+        userAgent.includes("mac os")
+      ) {
+        return "macOS";
+      }
+
+      if (
+        userAgent.includes("linux")
+      ) {
+        return "Linux";
+      }
+
+      return String(
+        navigator.platform || "Unknown"
+      );
+    }
+
+    function detectProviderDeviceModel() {
+      const userAgent =
+        String(navigator.userAgent || "");
+
+      const androidModelMatch =
+        userAgent.match(
+          /Android[^;]*;\s*([^;)]+?)(?:\s+Build\/|;|\))/i
+        );
+
+      if (
+        androidModelMatch &&
+        androidModelMatch[1]
+      ) {
+        return androidModelMatch[1].trim();
+      }
+
+      if (
+        /iPhone/i.test(userAgent)
+      ) {
+        return "iPhone";
+      }
+
+      if (
+        /iPad/i.test(userAgent)
+      ) {
+        return "iPad";
+      }
+
+      return String(
+        navigator.platform || ""
+      ).trim() || null;
+    }
+
+    async function readProviderBatteryMetadata() {
+      if (
+        typeof navigator.getBattery !== "function"
+      ) {
+        return {
+          batteryPercent: null,
+          batteryCharging: null,
+        };
+      }
+
+      try {
+        const battery =
+          await navigator.getBattery();
+
+        const level =
+          Number(battery.level);
+
+        return {
+          batteryPercent:
+            Number.isFinite(level)
+              ? Math.round(level * 1000) / 10
+              : null,
+
+          batteryCharging:
+            typeof battery.charging === "boolean"
+              ? battery.charging
+              : null,
+        };
+      } catch (err) {
+        console.warn(
+          "PROVIDER BATTERY METADATA FAILED:",
+          err
+        );
+
+        return {
+          batteryPercent: null,
+          batteryCharging: null,
+        };
+      }
+    }
+
+    async function readProviderLocationPermissionState() {
+      if (
+        !navigator.permissions ||
+        typeof navigator.permissions.query !== "function"
+      ) {
+        return null;
+      }
+
+      try {
+        const permission =
+          await navigator.permissions.query({
+            name: "geolocation",
+          });
+
+        return String(
+          permission.state || ""
+        ).trim() || null;
+      } catch (err) {
+        console.warn(
+          "PROVIDER LOCATION PERMISSION METADATA FAILED:",
+          err
+        );
+
+        return null;
+      }
+    }
+
+    async function buildProviderDeviceMetadata() {
+      const batteryMetadata =
+        await readProviderBatteryMetadata();
+
+      const permissionState =
+        await readProviderLocationPermissionState();
+
+      return {
+        devicePlatform:
+          detectProviderDevicePlatform(),
+
+        deviceModel:
+          detectProviderDeviceModel(),
+
+        browserName:
+          detectProviderBrowserName(),
+
+        appVersion:
+          PROVIDER_WEB_APP_VERSION,
+
+        batteryPercent:
+          batteryMetadata.batteryPercent,
+
+        batteryCharging:
+          batteryMetadata.batteryCharging,
+
+        permissionState,
+
+        isMockLocation:
+          null,
+      };
+    }
+
+    function getProviderDeviceMetadata() {
+      return buildProviderDeviceMetadata()
+        .catch((err) => {
+          console.warn(
+            "PROVIDER DEVICE METADATA FAILED:",
+            err
+          );
+
+          return {
+            devicePlatform: null,
+            deviceModel: null,
+            browserName: null,
+            appVersion:
+              PROVIDER_WEB_APP_VERSION,
+            batteryPercent: null,
+            batteryCharging: null,
+            permissionState: null,
+            isMockLocation: null,
+          };
+        });
+    }
+
+    async function sendProviderLocationPing(position) {
+      const coords =
+        position && position.coords
+          ? position.coords
+          : {};
+
+      const deviceMetadata =
+        await getProviderDeviceMetadata();
+
+      const capturedAt =
+        Number.isFinite(Number(position && position.timestamp))
+          ? new Date(
+              Number(position.timestamp)
+            ).toISOString()
+          : new Date().toISOString();
+
+      const res = await fetch(
+        API_BASE + "?task=provider_location_ping",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            token: currentToken,
+
+            latitude:
+              coords.latitude,
+
+            longitude:
+              coords.longitude,
+
+            accuracy:
+              Number.isFinite(Number(coords.accuracy))
+                ? Number(coords.accuracy)
+                : null,
+
+            altitude:
+              Number.isFinite(Number(coords.altitude))
+                ? Number(coords.altitude)
+                : null,
+
+            altitude_accuracy:
+              Number.isFinite(
+                Number(coords.altitudeAccuracy)
+              )
+                ? Number(coords.altitudeAccuracy)
+                : null,
+
+            speed:
+              Number.isFinite(Number(coords.speed)) &&
+              Number(coords.speed) >= 0
+                ? Number(coords.speed)
+                : null,
+
+            heading:
+              Number.isFinite(Number(coords.heading)) &&
+              Number(coords.heading) >= 0
+                ? Number(coords.heading)
+                : null,
+
+            captured_at:
+              capturedAt,
+
+            location_source:
+              "browser_geolocation",
+
+            is_background:
+              document.visibilityState !== "visible",
+
+            device_platform:
+              deviceMetadata.devicePlatform,
+
+            device_model:
+              deviceMetadata.deviceModel,
+
+            browser_name:
+              deviceMetadata.browserName,
+
+            app_version:
+              deviceMetadata.appVersion,
+
+            battery_percent:
+              deviceMetadata.batteryPercent,
+
+            battery_charging:
+              deviceMetadata.batteryCharging,
+
+            permission_state:
+              deviceMetadata.permissionState,
+
+            is_mock_location:
+              deviceMetadata.isMockLocation,
+
+            browser_user_agent:
+              String(navigator.userAgent || ""),
+          }),
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Could not send live ETA.");
+        throw new Error(
+          data.error ||
+          "Could not send live ETA."
+        );
       }
 
       markNavigationEtaHealth();
