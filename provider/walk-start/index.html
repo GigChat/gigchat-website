@@ -769,25 +769,221 @@
       ).trim();
     }
 
-    function buildWalkDeviceMetadata() {
+    const WALK_TELEMETRY_APP_VERSION =
+      "walk-timer-device-metadata-v1";
+
+    function detectWalkBrowserName() {
+      const userAgent =
+        String(
+          navigator.userAgent || ""
+        ).toLowerCase();
+
+      if (userAgent.includes("edg/")) {
+        return "Edge";
+      }
+
+      if (
+        userAgent.includes("crios") ||
+        userAgent.includes("chrome")
+      ) {
+        return "Chrome";
+      }
+
+      if (
+        userAgent.includes("fxios") ||
+        userAgent.includes("firefox")
+      ) {
+        return "Firefox";
+      }
+
+      if (userAgent.includes("safari")) {
+        return "Safari";
+      }
+
+      return "Unknown";
+    }
+
+    function detectWalkDevicePlatform() {
+      const userAgent =
+        String(
+          navigator.userAgent || ""
+        ).toLowerCase();
+
+      if (
+        userAgent.includes("iphone") ||
+        userAgent.includes("ipad") ||
+        userAgent.includes("ipod")
+      ) {
+        return "iOS";
+      }
+
+      if (userAgent.includes("android")) {
+        return "Android";
+      }
+
+      if (userAgent.includes("windows")) {
+        return "Windows";
+      }
+
+      if (
+        userAgent.includes("macintosh") ||
+        userAgent.includes("mac os")
+      ) {
+        return "macOS";
+      }
+
+      if (userAgent.includes("linux")) {
+        return "Linux";
+      }
+
+      return String(
+        navigator.userAgentData?.platform ||
+        navigator.platform ||
+        "Unknown"
+      ).trim();
+    }
+
+    function detectWalkDeviceModel() {
+      const userAgent =
+        String(
+          navigator.userAgent || ""
+        );
+
+      const androidModelMatch =
+        userAgent.match(
+          /Android[^;]*;\s*([^;)]+?)(?:\s+Build\/|;|\))/i
+        );
+
+      if (
+        androidModelMatch &&
+        androidModelMatch[1]
+      ) {
+        return androidModelMatch[1].trim();
+      }
+
+      if (/iPhone/i.test(userAgent)) {
+        return "iPhone";
+      }
+
+      if (/iPad/i.test(userAgent)) {
+        return "iPad";
+      }
+
+      return String(
+        navigator.platform || ""
+      ).trim() || null;
+    }
+
+    async function readWalkBatteryMetadata() {
+      if (
+        typeof navigator.getBattery !==
+        "function"
+      ) {
+        return {
+          batteryPercent: null,
+          batteryCharging: null
+        };
+      }
+
+      try {
+        const battery =
+          await navigator.getBattery();
+
+        const level =
+          Number(battery.level);
+
+        return {
+          batteryPercent:
+            Number.isFinite(level)
+              ? Math.round(level * 1000) / 10
+              : null,
+
+          batteryCharging:
+            typeof battery.charging ===
+            "boolean"
+              ? battery.charging
+              : null
+        };
+      } catch (error) {
+        console.warn(
+          "WALK BATTERY METADATA FAILED:",
+          error
+        );
+
+        return {
+          batteryPercent: null,
+          batteryCharging: null
+        };
+      }
+    }
+
+    async function readWalkPermissionState() {
+      if (
+        !navigator.permissions ||
+        typeof navigator.permissions.query !==
+          "function"
+      ) {
+        return null;
+      }
+
+      try {
+        const permission =
+          await navigator.permissions.query({
+            name: "geolocation"
+          });
+
+        return String(
+          permission.state || ""
+        ).trim() || null;
+      } catch (error) {
+        console.warn(
+          "WALK LOCATION PERMISSION METADATA FAILED:",
+          error
+        );
+
+        return null;
+      }
+    }
+
+    async function buildWalkDeviceMetadata() {
       const userAgent =
         String(
           navigator.userAgent || ""
         ).trim();
 
-      const platform =
-        String(
-          navigator.userAgentData?.platform ||
-          navigator.platform ||
-          ""
-        ).trim();
+      const batteryMetadata =
+        await readWalkBatteryMetadata();
+
+      const permissionState =
+        await readWalkPermissionState();
 
       return {
         device_platform:
-          platform || null,
+          detectWalkDevicePlatform(),
+
+        device_model:
+          detectWalkDeviceModel(),
+
+        browser_name:
+          detectWalkBrowserName(),
 
         browser_user_agent:
           userAgent || null,
+
+        app_version:
+          WALK_TELEMETRY_APP_VERSION,
+
+        battery_percent:
+          batteryMetadata.batteryPercent,
+
+        battery_charging:
+          batteryMetadata.batteryCharging,
+
+        permission_state:
+          permissionState,
+
+        is_mock_location:
+          null,
 
         language:
           String(
@@ -939,7 +1135,7 @@
                   document.visibilityState !==
                   "visible",
 
-                ...buildWalkDeviceMetadata()
+                ...(await buildWalkDeviceMetadata())
               })
             }
           );
