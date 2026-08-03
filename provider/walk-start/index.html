@@ -1612,24 +1612,109 @@
       uploadButton.disabled = true;
       retakeButton.disabled = true;
 
-      if (isWalkEndMode()) {
+      const walkEndMode =
+        isWalkEndMode();
+
+      let instantWalkStarted =
+        false;
+
+      if (walkEndMode) {
         setStatus(
           "Uploading secure final photo...",
           "Subiendo la foto final segura..."
         );
       } else {
         setStatus(
-          "Uploading secure walk photo...",
-          "Subiendo la foto segura de la caminata..."
+          "Starting the walk...",
+          "Iniciando la caminata..."
         );
       }
 
       try {
-        const token = getToken();
+        const token =
+          getToken();
+
+        if (!token) {
+          throw new Error(
+            text(
+              "Missing secure walk token.",
+              "Falta el token seguro de la caminata."
+            )
+          );
+        }
+
+        /*
+         * Confirm the start before uploading the photo.
+         * This makes the server timer authoritative and
+         * prevents network upload time from delaying the walk.
+         */
+        if (!walkEndMode) {
+          const confirmResponse =
+            await fetch(
+              API_BASE +
+                "?task=walk_start_confirm",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type":
+                    "application/json"
+                },
+                body: JSON.stringify({
+                  token
+                })
+              }
+            );
+
+          const confirmData =
+            await confirmResponse.json();
+
+          if (
+            !confirmResponse.ok ||
+            !confirmData.ok
+          ) {
+            throw new Error(
+              confirmData.error ||
+              text(
+                "The walk could not be started.",
+                "No se pudo iniciar la caminata."
+              )
+            );
+          }
+
+          instantWalkStarted = true;
+
+          console.log(
+            "INSTANT WALK START CONFIRMED:",
+            {
+              dispatchJobId:
+                confirmData.dispatch_job_id,
+              status:
+                confirmData.status,
+              startedAt:
+                confirmData.started_at,
+              expectedEndAt:
+                confirmData.expected_end_at
+            }
+          );
+
+          /*
+           * Show the timer and begin walk telemetry immediately.
+           * The photo continues uploading below.
+           */
+          showWalkStarted(
+            confirmData
+          );
+
+          timerStateEl.textContent =
+            text(
+              "Walk started. Securing the start photo...",
+              "Caminata iniciada. Asegurando la foto inicial..."
+            );
+        }
 
         const location =
           await getCurrentPositionForUpload(
-            isWalkEndMode()
+            walkEndMode
               ? {
                   timeout: 12000,
                   maximumAge: 0
@@ -1640,7 +1725,7 @@
                 }
           );
 
-        if (!isWalkEndMode()) {
+        if (!walkEndMode) {
           try {
             const warmupResponse =
               await fetch(
@@ -1673,26 +1758,38 @@
         formData.append(
           "photo",
           capturedPhotoBlob,
-          isWalkEndMode()
+          walkEndMode
             ? "walk-end.jpg"
             : "walk-start.jpg"
         );
 
-        if (Number.isFinite(location.latitude)) {
+        if (
+          Number.isFinite(
+            location.latitude
+          )
+        ) {
           formData.append(
             "latitude",
             String(location.latitude)
           );
         }
 
-        if (Number.isFinite(location.longitude)) {
+        if (
+          Number.isFinite(
+            location.longitude
+          )
+        ) {
           formData.append(
             "longitude",
             String(location.longitude)
           );
         }
 
-        if (Number.isFinite(location.accuracy)) {
+        if (
+          Number.isFinite(
+            location.accuracy
+          )
+        ) {
           formData.append(
             "accuracy",
             String(location.accuracy)
@@ -1704,7 +1801,7 @@
             API_BASE +
               "?task=" +
               (
-                isWalkEndMode()
+                walkEndMode
                   ? "walk_end_photo_upload"
                   : "walk_start_photo_upload"
               ),
@@ -1717,39 +1814,120 @@
         const data =
           await response.json();
 
-        if (!response.ok || !data.ok) {
+        if (
+          !response.ok ||
+          !data.ok
+        ) {
           throw new Error(
             data.error ||
               "Photo upload failed."
           );
         }
 
-        uploadButton.classList.add("hidden");
-        retakeButton.classList.add("hidden");
+        uploadButton.classList.add(
+          "hidden"
+        );
 
-        if (isWalkEndMode()) {
+        retakeButton.classList.add(
+          "hidden"
+        );
+
+        if (walkEndMode) {
           showWalkCompleted(data);
         } else {
-          showWalkStarted(data);
+          /*
+           * Do not restart the timer here. It was already
+           * started using the server confirmation response.
+           */
+          timerStateEl.textContent =
+            text(
+              "Start photo secured. The walk is in progress.",
+              "Foto inicial asegurada. La caminata está en progreso."
+            );
+
+          console.log(
+            "WALK START PHOTO SECURED:",
+            {
+              dispatchJobId:
+                data.dispatch_job_id,
+              photoId:
+                data.photo_id,
+              startedAt:
+                data.started_at,
+              expectedEndAt:
+                data.expected_end_at
+            }
+          );
         }
       } catch (error) {
         console.error(
-          isWalkEndMode()
+          walkEndMode
             ? "WALK END PHOTO UPLOAD FAILED:"
-            : "WALK START PHOTO UPLOAD FAILED:",
+            : instantWalkStarted
+              ? "WALK START PHOTO UPLOAD FAILED AFTER TIMER START:"
+              : "WALK START CONFIRMATION FAILED:",
           error
         );
 
         uploadButton.disabled = false;
         retakeButton.disabled = false;
 
-        statusEl.textContent =
-          error && error.message
-            ? error.message
-            : text(
-                "Photo upload failed.",
-                "No se pudo subir la foto."
-              );
+        if (
+          !walkEndMode &&
+          instantWalkStarted
+        ) {
+          /*
+           * The authoritative timer is already running.
+           * Return to the captured photo so the provider can
+           * retry without creating a second walk start.
+           */
+          walkStartedCardEl.classList.add(
+            "hidden"
+          );
+
+          cameraShellEl.classList.remove(
+            "hidden"
+          );
+
+          actionsEl.classList.remove(
+            "hidden"
+          );
+
+          statusEl.classList.remove(
+            "hidden"
+          );
+
+          securityNoteEl.classList.remove(
+            "hidden"
+          );
+
+          uploadButton.classList.remove(
+            "hidden"
+          );
+
+          retakeButton.classList.remove(
+            "hidden"
+          );
+
+          statusEl.textContent =
+            error && error.message
+              ? text(
+                  `The walk started, but the photo could not be secured: ${error.message}. Try again.`,
+                  `La caminata comenzó, pero no se pudo asegurar la foto: ${error.message}. Inténtalo otra vez.`
+                )
+              : text(
+                  "The walk started, but the photo could not be secured. Try again.",
+                  "La caminata comenzó, pero no se pudo asegurar la foto. Inténtalo otra vez."
+                );
+        } else {
+          statusEl.textContent =
+            error && error.message
+              ? error.message
+              : text(
+                  "Photo upload failed.",
+                  "No se pudo subir la foto."
+                );
+        }
       } finally {
         uploadInProgress = false;
       }
