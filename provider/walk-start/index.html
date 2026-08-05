@@ -389,6 +389,7 @@
      * initial photo starts the walk.
      */
     let walkLocationWatchId = null;
+    let walkLocationHeartbeatIntervalId = null;
     let walkLocationLastPingAt = 0;
     let walkLocationPingInFlight = false;
     let walkTelemetryActive = false;
@@ -756,6 +757,16 @@
         navigator.geolocation.clearWatch(
           walkLocationWatchId
         );
+      }
+
+      if (
+        walkLocationHeartbeatIntervalId !== null
+      ) {
+        window.clearInterval(
+          walkLocationHeartbeatIntervalId
+        );
+
+        walkLocationHeartbeatIntervalId = null;
       }
 
       walkLocationWatchId = null;
@@ -1170,6 +1181,51 @@
       }
     }
 
+    function requestWalkHeartbeatLocation(
+      reason = "heartbeat"
+    ) {
+      if (
+        !walkTelemetryActive ||
+        !navigator.geolocation
+      ) {
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          void sendWalkLocationPing(
+            position,
+            false
+          ).catch((error) => {
+            console.warn(
+              "WALK LOCATION HEARTBEAT PING FAILED:",
+              {
+                reason,
+                error
+              }
+            );
+          });
+        },
+        (error) => {
+          console.warn(
+            "WALK LOCATION HEARTBEAT FAILED:",
+            {
+              reason,
+              code:
+                error?.code ?? null,
+              message:
+                error?.message ?? null
+            }
+          );
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0
+        }
+      );
+    }
+
     function startWalkLocationTracking(
       reason = "walk-started"
     ) {
@@ -1233,6 +1289,28 @@
             maximumAge: 5000
           }
         );
+
+      if (
+        walkLocationHeartbeatIntervalId !== null
+      ) {
+        window.clearInterval(
+          walkLocationHeartbeatIntervalId
+        );
+      }
+
+      walkLocationHeartbeatIntervalId =
+        window.setInterval(
+          () => {
+            requestWalkHeartbeatLocation(
+              "scheduled-heartbeat"
+            );
+          },
+          10000
+        );
+
+      requestWalkHeartbeatLocation(
+        "tracking-start"
+      );
 
       console.log(
         "WALK LOCATION WATCH STARTED:",
