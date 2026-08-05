@@ -1615,9 +1615,6 @@
       const walkEndMode =
         isWalkEndMode();
 
-      let instantWalkStarted =
-        false;
-
       if (walkEndMode) {
         setStatus(
           "Uploading secure final photo...",
@@ -1681,35 +1678,22 @@
             );
           }
 
-          instantWalkStarted = true;
-
           console.log(
-            "INSTANT WALK START CONFIRMED:",
+            "WALK START PHOTO REQUIREMENT CONFIRMED:",
             {
               dispatchJobId:
                 confirmData.dispatch_job_id,
               status:
                 confirmData.status,
-              startedAt:
-                confirmData.started_at,
-              expectedEndAt:
-                confirmData.expected_end_at
+              timerStarted:
+                confirmData.timer_started
             }
           );
 
-          /*
-           * Show the timer and begin walk telemetry immediately.
-           * The photo continues uploading below.
-           */
-          showWalkStarted(
-            confirmData
+          setStatus(
+            "Verifying location and securing the start photo...",
+            "Verificando la ubicación y asegurando la foto inicial..."
           );
-
-          timerStateEl.textContent =
-            text(
-              "Walk started. Securing the start photo...",
-              "Caminata iniciada. Asegurando la foto inicial..."
-            );
         }
 
         const location =
@@ -1818,10 +1802,25 @@
           !response.ok ||
           !data.ok
         ) {
-          throw new Error(
-            data.error ||
-              "Photo upload failed."
-          );
+          const uploadError =
+            new Error(
+              data.error ||
+                "Photo upload failed."
+            );
+
+          uploadError.status =
+            data.status || null;
+
+          uploadError.reasonCode =
+            data.reason_code || null;
+
+          uploadError.distanceFromOriginMeters =
+            data.distance_from_origin_meters ?? null;
+
+          uploadError.effectiveAllowedRadiusMeters =
+            data.effective_allowed_radius_meters ?? null;
+
+          throw uploadError;
         }
 
         uploadButton.classList.add(
@@ -1835,10 +1834,7 @@
         if (walkEndMode) {
           showWalkCompleted(data);
         } else {
-          /*
-           * Do not restart the timer here. It was already
-           * started using the server confirmation response.
-           */
+          showWalkStarted(data);
           timerStateEl.textContent =
             text(
               "Start photo secured. The walk is in progress.",
@@ -1863,24 +1859,14 @@
         console.error(
           walkEndMode
             ? "WALK END PHOTO UPLOAD FAILED:"
-            : instantWalkStarted
-              ? "WALK START PHOTO UPLOAD FAILED AFTER TIMER START:"
-              : "WALK START CONFIRMATION FAILED:",
+            : "WALK START PHOTO UPLOAD FAILED:",
           error
         );
 
         uploadButton.disabled = false;
         retakeButton.disabled = false;
 
-        if (
-          !walkEndMode &&
-          instantWalkStarted
-        ) {
-          /*
-           * The authoritative timer is already running.
-           * Return to the captured photo so the provider can
-           * retry without creating a second walk start.
-           */
+        if (!walkEndMode) {
           walkStartedCardEl.classList.add(
             "hidden"
           );
@@ -1909,16 +1895,51 @@
             "hidden"
           );
 
-          statusEl.textContent =
-            error && error.message
-              ? text(
-                  `The walk started, but the photo could not be secured: ${error.message}. Try again.`,
-                  `La caminata comenzó, pero no se pudo asegurar la foto: ${error.message}. Inténtalo otra vez.`
-                )
-              : text(
-                  "The walk started, but the photo could not be secured. Try again.",
-                  "La caminata comenzó, pero no se pudo asegurar la foto. Inténtalo otra vez."
-                );
+          if (
+            error &&
+            error.status ===
+              "walk_location_gate_denied"
+          ) {
+            const distance =
+              Number(
+                error.distanceFromOriginMeters
+              );
+
+            const allowedRadius =
+              Number(
+                error.effectiveAllowedRadiusMeters
+              );
+
+            const distanceText =
+              Number.isFinite(distance)
+                ? Math.round(distance)
+                : null;
+
+            const radiusText =
+              Number.isFinite(allowedRadius)
+                ? Math.round(allowedRadius)
+                : null;
+
+            statusEl.textContent =
+              text(
+                distanceText !== null &&
+                    radiusText !== null
+                  ? `You are ${distanceText} meters from the required start location. Move within ${radiusText} meters and try again.`
+                  : "You are outside the allowed start location. Move closer and try again.",
+                distanceText !== null &&
+                    radiusText !== null
+                  ? `Estás a ${distanceText} metros del punto requerido. Acércate a menos de ${radiusText} metros y vuelve a intentarlo.`
+                  : "Estás fuera del área permitida para iniciar. Acércate y vuelve a intentarlo."
+              );
+          } else {
+            statusEl.textContent =
+              error && error.message
+                ? error.message
+                : text(
+                    "Photo upload failed.",
+                    "No se pudo subir la foto."
+                  );
+          }
         } else {
           statusEl.textContent =
             error && error.message
