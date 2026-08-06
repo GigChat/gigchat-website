@@ -1116,6 +1116,8 @@
       });
 
       let pingStage = "started";
+      let fetchTimeoutId = null;
+      let fetchTimedOut = false;
 
       try {
         const capturedAt =
@@ -1154,12 +1156,28 @@
           pingId
         });
 
+        const fetchController =
+          new AbortController();
+
+        fetchTimedOut = false;
+
+        fetchTimeoutId =
+          window.setTimeout(
+            () => {
+              fetchTimedOut = true;
+              fetchController.abort();
+            },
+            10000
+          );
+
         const response =
           await fetch(
             API_BASE +
               "?task=provider_location_ping",
             {
               method: "POST",
+              signal:
+                fetchController.signal,
               headers: {
                 "Content-Type":
                   "application/json"
@@ -1230,6 +1248,14 @@
             }
           );
 
+        if (fetchTimeoutId !== null) {
+          window.clearTimeout(
+            fetchTimeoutId
+          );
+
+          fetchTimeoutId = null;
+        }
+
         logWalkDebug("FETCH_FINISHED", {
           pingId,
           elapsedMs:
@@ -1269,7 +1295,10 @@
         );
       } catch (error) {
         logWalkDebug(
-          pingStage === "fetch"
+          fetchTimedOut ||
+              error?.name === "AbortError"
+            ? "FETCH_TIMEOUT"
+            : pingStage === "fetch"
             ? "FETCH_ERROR"
             : "PING_ERROR",
           {
@@ -1287,6 +1316,14 @@
 
         throw error;
       } finally {
+        if (fetchTimeoutId !== null) {
+          window.clearTimeout(
+            fetchTimeoutId
+          );
+
+          fetchTimeoutId = null;
+        }
+
         logWalkDebug("PING_FINALLY", {
           pingId,
           stage:
