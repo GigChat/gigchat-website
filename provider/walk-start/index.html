@@ -409,6 +409,12 @@
       console.log("[WALK DEBUG]", entry);
     }
 
+    window.copyWalkDebugLog = async function () {
+      const json = JSON.stringify(walkDebugLog, null, 2);
+      await navigator.clipboard.writeText(json);
+      alert("Walk debug copied to clipboard.");
+    };
+
     const WALK_LOCATION_PING_INTERVAL_MS =
       5000;
 
@@ -2282,5 +2288,12 @@
           : "Something went wrong.";
     });
   </script>
+<button
+  onclick="copyWalkDebugLog()"
+  style="position:fixed;bottom:20px;right:20px;z-index:999999;padding:12px 18px;font-size:16px;"
+>
+Copy Walk Debug
+</button>
+
 </body>
 </html>
