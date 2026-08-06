@@ -394,6 +394,21 @@
     let walkLocationPingInFlight = false;
     let walkTelemetryActive = false;
 
+    const walkDebugLog = [];
+
+    function logWalkDebug(event, details = {}) {
+      const entry = {
+        time: new Date().toISOString(),
+        event,
+        ...details
+      };
+
+      walkDebugLog.push(entry);
+      window.walkDebugLog = walkDebugLog;
+
+      console.log("[WALK DEBUG]", entry);
+    }
+
     const WALK_LOCATION_PING_INTERVAL_MS =
       5000;
 
@@ -1055,10 +1070,17 @@
         now - walkLocationLastPingAt <
           WALK_LOCATION_PING_INTERVAL_MS
       ) {
+        logWalkDebug("SKIP_INTERVAL", {
+          elapsedMs:
+            now - walkLocationLastPingAt
+        });
+
         return;
       }
 
       if (walkLocationPingInFlight) {
+        logWalkDebug("SKIP_INFLIGHT");
+
         return;
       }
 
@@ -1261,6 +1283,17 @@
       walkLocationWatchId =
         navigator.geolocation.watchPosition(
           (position) => {
+            logWalkDebug("WATCH_CALLBACK", {
+              timestamp:
+                position?.timestamp ?? null,
+              accuracy:
+                position?.coords?.accuracy ?? null,
+              speed:
+                position?.coords?.speed ?? null,
+              heading:
+                position?.coords?.heading ?? null
+            });
+
             void sendWalkLocationPing(
               position,
               walkLocationLastPingAt === 0
