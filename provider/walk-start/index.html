@@ -395,6 +395,9 @@
     let walkTelemetryActive = false;
 
     const walkDebugLog = [];
+    let walkDebugPingSequence = 0;
+    let walkLocationActivePingId = null;
+    let walkLocationPingStartedAt = 0;
 
     function logWalkDebug(event, details = {}) {
       const entry = {
@@ -1085,13 +1088,34 @@
       }
 
       if (walkLocationPingInFlight) {
-        logWalkDebug("SKIP_INFLIGHT");
+        logWalkDebug("SKIP_INFLIGHT", {
+          activePingId:
+            walkLocationActivePingId,
+          inFlightMs:
+            walkLocationPingStartedAt > 0
+              ? now - walkLocationPingStartedAt
+              : null
+        });
 
         return;
       }
 
+      const pingId =
+        ++walkDebugPingSequence;
+
       walkLocationPingInFlight = true;
       walkLocationLastPingAt = now;
+      walkLocationActivePingId = pingId;
+      walkLocationPingStartedAt = now;
+
+      logWalkDebug("PING_STARTED", {
+        pingId,
+        forcePing,
+        accuracy:
+          coords.accuracy ?? null
+      });
+
+      let pingStage = "started";
 
       try {
         const capturedAt =
@@ -1102,6 +1126,33 @@
                 Number(position.timestamp)
               ).toISOString()
             : new Date().toISOString();
+
+        pingStage = "metadata";
+
+        const metadataStartedAt =
+          Date.now();
+
+        logWalkDebug("METADATA_STARTED", {
+          pingId
+        });
+
+        const deviceMetadata =
+          await buildWalkDeviceMetadata();
+
+        logWalkDebug("METADATA_FINISHED", {
+          pingId,
+          elapsedMs:
+            Date.now() - metadataStartedAt
+        });
+
+        pingStage = "fetch";
+
+        const fetchStartedAt =
+          Date.now();
+
+        logWalkDebug("FETCH_STARTED", {
+          pingId
+        });
 
         const response =
           await fetch(
@@ -1174,10 +1225,22 @@
                   document.visibilityState !==
                   "visible",
 
-                ...(await buildWalkDeviceMetadata())
+                ...deviceMetadata
               })
             }
           );
+
+        logWalkDebug("FETCH_FINISHED", {
+          pingId,
+          elapsedMs:
+            Date.now() - fetchStartedAt,
+          status:
+            response.status,
+          ok:
+            response.ok
+        });
+
+        pingStage = "response_json";
 
         const data =
           await response.json();
@@ -1204,8 +1267,38 @@
               coords.accuracy ?? null
           }
         );
+      } catch (error) {
+        logWalkDebug(
+          pingStage === "fetch"
+            ? "FETCH_ERROR"
+            : "PING_ERROR",
+          {
+            pingId,
+            stage:
+              pingStage,
+            elapsedMs:
+              Date.now() -
+              walkLocationPingStartedAt,
+            message:
+              error?.message ??
+              String(error)
+          }
+        );
+
+        throw error;
       } finally {
+        logWalkDebug("PING_FINALLY", {
+          pingId,
+          stage:
+            pingStage,
+          elapsedMs:
+            Date.now() -
+            walkLocationPingStartedAt
+        });
+
         walkLocationPingInFlight = false;
+        walkLocationActivePingId = null;
+        walkLocationPingStartedAt = 0;
       }
     }
 
