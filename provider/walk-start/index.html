@@ -394,12 +394,90 @@
     let walkLocationPingInFlight = false;
     let walkTelemetryActive = false;
 
-    const walkDebugLog = [];
+    const WALK_DEBUG_STORAGE_KEY =
+      "gigchat_walk_debug_session_v1";
+
+    let walkDebugLog = [];
+    let walkDebugRecording = false;
+
+    function loadWalkDebugSession() {
+      try {
+        const raw =
+          window.localStorage.getItem(
+            WALK_DEBUG_STORAGE_KEY
+          );
+
+        if (!raw) {
+          return;
+        }
+
+        const saved = JSON.parse(raw);
+
+        if (
+          saved &&
+          Array.isArray(saved.events)
+        ) {
+          walkDebugLog = saved.events;
+          walkDebugRecording =
+            saved.recording === true;
+        }
+      } catch (error) {
+        console.warn(
+          "WALK DEBUG SESSION LOAD FAILED:",
+          error
+        );
+      }
+
+      window.walkDebugLog = walkDebugLog;
+    }
+
+    function persistWalkDebugSession() {
+      try {
+        const payload = {
+          recording: walkDebugRecording,
+          updatedAt:
+            new Date().toISOString(),
+          events: walkDebugLog
+        };
+
+        window.localStorage.setItem(
+          WALK_DEBUG_STORAGE_KEY,
+          JSON.stringify(payload)
+        );
+      } catch (error) {
+        console.warn(
+          "WALK DEBUG SESSION SAVE FAILED:",
+          error
+        );
+      }
+    }
+
+    function startNewWalkDebugSession() {
+      walkDebugLog = [];
+      walkDebugRecording = true;
+      window.walkDebugLog = walkDebugLog;
+
+      persistWalkDebugSession();
+
+      logWalkDebug(
+        "DEBUG_SESSION_STARTED"
+      );
+    }
+
+    function stopWalkDebugRecording() {
+      walkDebugRecording = false;
+      persistWalkDebugSession();
+    }
+
     let walkDebugPingSequence = 0;
     let walkLocationActivePingId = null;
     let walkLocationPingStartedAt = 0;
 
     function logWalkDebug(event, details = {}) {
+      if (!walkDebugRecording) {
+        return;
+      }
+
       const entry = {
         time: new Date().toISOString(),
         event,
@@ -409,24 +487,54 @@
       walkDebugLog.push(entry);
       window.walkDebugLog = walkDebugLog;
 
+      persistWalkDebugSession();
+
       console.log("[WALK DEBUG]", entry);
     }
 
-    window.copyWalkDebugLog = async function () {
-      const json = JSON.stringify(walkDebugLog, null, 2);
-      await navigator.clipboard.writeText(json);
-      alert("Walk debug copied to clipboard.");
-    };
+    window.exportWalkDebugLog = function () {
+      let exportLog = walkDebugLog;
 
-    window.downloadWalkDebugLog = function () {
-      const json = JSON.stringify(walkDebugLog, null, 2);
+      try {
+        const raw =
+          window.localStorage.getItem(
+            WALK_DEBUG_STORAGE_KEY
+          );
+
+        if (raw) {
+          const saved = JSON.parse(raw);
+
+          if (
+            saved &&
+            Array.isArray(saved.events)
+          ) {
+            exportLog = saved.events;
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "WALK DEBUG EXPORT LOAD FAILED:",
+          error
+        );
+      }
+
+      const json =
+        JSON.stringify(
+          exportLog,
+          null,
+          2
+        );
 
       const blob = new Blob(
         [json],
-        { type: "text/plain;charset=utf-8" }
+        {
+          type:
+            "text/plain;charset=utf-8"
+        }
       );
 
-      const url = URL.createObjectURL(blob);
+      const url =
+        URL.createObjectURL(blob);
 
       const timestamp =
         new Date()
@@ -434,7 +542,8 @@
           .replace(/:/g, "-")
           .replace(/\./g, "-");
 
-      const link = document.createElement("a");
+      const link =
+        document.createElement("a");
 
       link.href = url;
       link.download =
@@ -450,6 +559,8 @@
         URL.revokeObjectURL(url);
       }, 1000);
     };
+
+    loadWalkDebugSession();
     const WALK_LOCATION_PING_INTERVAL_MS =
       5000;
 
@@ -1797,6 +1908,7 @@
       stopCamera();
       stopWalkTimer();
       stopWalkLocationTracking();
+      stopWalkDebugRecording();
 
       const dogName =
         String(
@@ -2113,6 +2225,7 @@
         if (walkEndMode) {
           showWalkCompleted(data);
         } else {
+          startNewWalkDebugSession();
           showWalkStarted(data);
           timerStateEl.textContent =
             text(
@@ -2378,6 +2491,11 @@
       if (jobStatus === "in_progress") {
         console.log("walk_timer_recovered");
 
+          if (!walkDebugRecording) {
+            startNewWalkDebugSession();
+          }
+
+
         showWalkStarted({
           dog_name: dogName,
           duration_minutes: duration,
@@ -2451,18 +2569,11 @@
     });
   </script>
 <button
-  onclick="copyWalkDebugLog()"
+  onclick="exportWalkDebugLog()"
   style="position:fixed;bottom:20px;right:20px;z-index:999999;padding:12px 18px;font-size:16px;"
 >
-Copy Walk Debug
+Export Walk Debug
 </button>
 
-
-<button
-  onclick="downloadWalkDebugLog()"
-  style="position:fixed;bottom:70px;right:20px;z-index:999999;padding:12px 18px;font-size:16px;"
->
-Download Walk Debug
-</button>
 </body>
 </html>
