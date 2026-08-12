@@ -5030,7 +5030,59 @@
         setStatus(providerText("Simulator mode loading...", "Cargando modo simulador..."));
         setTimeout(startProviderRouteSimulator, 900);
       } else {
-        setStatus(providerText("Tap Start when you are on the way.", "Toca Comenzar cuando est\u00e9s en camino."));
+        const jobStatus =
+          String(job.status || "")
+            .trim()
+            .toLowerCase();
+
+        const serviceType =
+          String(job.service_type || "")
+            .trim()
+            .toLowerCase();
+
+        const activeWalk =
+          jobStatus === "in_progress" &&
+          (
+            serviceType === "walk" ||
+            serviceType === "walking"
+          );
+
+        if (activeWalk) {
+          navigationVisibilityTracking = true;
+          followProvider = true;
+
+          if (screenEl) {
+            screenEl.classList.add("live");
+          }
+
+          navBtn.textContent =
+            providerText(
+              "Navigation on",
+              "Navegaci\u00f3n activa"
+            );
+
+          navBtn.disabled = true;
+
+          setStatus(
+            providerText(
+              "Walk in progress. Restoring live location...",
+              "Caminata en progreso. Restaurando ubicaci\u00f3n en vivo..."
+            )
+          );
+
+          setTimeout(() => {
+            recoverProviderNavigation(
+              "active-walk-page-load"
+            );
+          }, 500);
+        } else {
+          setStatus(
+            providerText(
+              "Tap Start when you are on the way.",
+              "Toca Comenzar cuando est\u00e9s en camino."
+            )
+          );
+        }
       }
     }
 
